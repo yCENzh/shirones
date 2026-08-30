@@ -52,7 +52,10 @@ jobs:
       - name: Set up pnpm and Node
         uses: pnpm/setup@v2
         with:
-          version: 11.24.0
+          # Track the latest pnpm: the published package's `packageManager`
+          # (and therefore every `init`-scaffolded project) pins exactly this
+          # version, which build-package.mjs captures via `pnpm --version`.
+          version: latest
           runtime: node@24
           # no cache: — its cache key hashes a lockfile, and the lockfile worth keying on (the theme's) does not exist until the sync step.
           cache: false

@@ -248,15 +248,29 @@ console.log(`[build] dependency scan clean (${Object.keys(dependencies).length} 
 const bin = { shirones: "./bin/cli.mjs" };
 if (PACKAGE_NAME !== "shirones") bin[PACKAGE_NAME] = "./bin/cli.mjs";
 
+// Pin the published package to the pnpm that actually builds it — `init`
+// echoes this into the user's package.json so a fresh project pins the same
+// pnpm the package was built and validated with. In the publish workflow this
+// is the `latest` pnpm from `pnpm/setup@v2` (captured via `pnpm --version`);
+// locally it is whatever pnpm runs this build.
+let pnpmVersion = (process.env.PNPM_VERSION ?? "").trim();
+if (!pnpmVersion) {
+	try {
+		pnpmVersion = execFileSync("pnpm", ["--version"], {
+			encoding: "utf8",
+		}).trim();
+	} catch {
+		pnpmVersion = "";
+	}
+}
+
 const pkg = {
 	name: PACKAGE_NAME,
 	version: PACKAGE_VERSION ?? "0.0.0",
 	type: "module",
 	description: upstreamPkg.description,
 	license: upstreamPkg.license,
-	// The theme's own package-manager pin, so `init` can echo it into the
-	// user's package.json (see src/integration/cli.mjs).
-	...(upstreamPkg.packageManager ? { packageManager: upstreamPkg.packageManager } : {}),
+	...(pnpmVersion ? { packageManager: `pnpm@${pnpmVersion}` } : {}),
 	author: PACKAGE_AUTHOR,
 	homepage: PACKAGE_HOMEPAGE,
 	// The published artefact is built and released from *this* repository, and
