@@ -111,9 +111,10 @@ non-negotiable:
   `src/plugins/markdown/core/file-tree-icons.mjs` needs.
 - **`PEER_DEPENDENCIES` exist for tools that resolve from the user's project
   root**, where pnpm's strict layout hides the theme's own copies: `svelte`
-  (`@astrojs/svelte` registers `svelte/*` subpaths in `optimizeDeps.include`),
-  `sharp` (Astro's image service imports it from the project root), and the
-  `@iconify-json/*` sets (astro-icon uses `require.resolve` outside Vite).
+  and `@astrojs/svelte` (`@astrojs/svelte` registers `svelte/*` subpaths and
+  `@astrojs/svelte/client.js` in `optimizeDeps.include`), `sharp` (Astro's
+  image service imports it from the project root), and the `@iconify-json/*`
+  sets (astro-icon uses `require.resolve` outside Vite).
   `shirones init` installs them all, so users still run one command.
 - A missing `exports` entry surfaces later as an opaque *"X is not a function"*
   in the user's build, so the entries are validated in step 5 rather than

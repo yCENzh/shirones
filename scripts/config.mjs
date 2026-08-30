@@ -140,6 +140,10 @@ export const IGNORED_IMPORTS = new Set([
  *
  * - `svelte` — `@astrojs/svelte` registers a dozen `svelte/*` subpaths in
  *   `optimizeDeps.include`, which Vite resolves from the project root.
+ * - `@astrojs/svelte` — that same integration also registers
+ *   `@astrojs/svelte/client.js` in `optimizeDeps.include` (the hydration
+ *   client). Without it at the root, Vite logs "Failed to resolve dependency"
+ *   in dev and Svelte islands never hydrate in the browser.
  * - `@iconify-json/*` — astro-icon loads icon sets through `require.resolve`
  *   in Node, outside Vite, so the integration's fallback resolver cannot help.
  *
@@ -149,6 +153,7 @@ export const IGNORED_IMPORTS = new Set([
 export const PEER_DEPENDENCIES = {
 	astro: "^7.0.0",
 	svelte: "^5.0.0",
+	"@astrojs/svelte": "^9.0.1",
 	// Astro's built-in image service dynamically imports `sharp` from the
 	// project root; pnpm's strict layout hides the copy nested in the theme.
 	sharp: "^0.34.5",

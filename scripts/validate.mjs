@@ -238,11 +238,22 @@ async function checkDevServer() {
 		// paths (e.g. a specific demo post) breaks the moment upstream renames
 		// or deletes them. Prefer the manifest's static routes, plus one real
 		// article for the dynamic [...slug] route discovered from the scaffold.
+		//
+		// The theme serves with `trailingSlash: "always"` (set in
+		// src/integration/index.ts), so page URLs live under `/about/` while
+		// file endpoints (rss.xml, robots.txt) keep no slash. Requesting
+		// `/about` without the slash 404s in dev, so canonicalize each URL.
+		const fileLike = /\/[^/]+\.[^/]+$/;
+		const canonicalUrl = (pattern) =>
+			pattern === "/" || fileLike.test(pattern) ? pattern : `${pattern}/`;
+
 		const staticPatterns = new Set(manifest.routes.map((route) => route.pattern));
-		// Manifest patterns have no trailing slash; match against those.
-		const routes = ["/", "/about", "/archive", "/moments", "/rss.xml"].filter(
-			(pattern) => staticPatterns.has(pattern),
-		);
+		// Manifest patterns carry no trailing slash; match against those, then
+		// add it. "/" is always kept: the homepage is the dynamic /[...page]
+		// route, so it never appears as a static manifest pattern.
+		const routes = ["/", "/about", "/archive", "/moments", "/rss.xml"]
+			.filter((pattern) => pattern === "/" || staticPatterns.has(pattern))
+			.map(canonicalUrl);
 
 		const postsPattern = manifest.routes.find(
 			(route) =>
@@ -253,8 +264,11 @@ async function checkDevServer() {
 			? (await readdir(postsDir)).find((name) => /\.(md|mdx)$/.test(name))
 			: undefined;
 		if (postsPattern && firstPost) {
+			// A post is always an HTML page, so it always gets the trailing
+			// slash under trailingSlash: "always" — even if its slug happens
+			// to contain a dot.
 			routes.push(
-				postsPattern.replace("[...slug]", firstPost.replace(/\.(md|mdx)$/, "")),
+				`${postsPattern.replace("[...slug]", firstPost.replace(/\.(md|mdx)$/, ""))}/`,
 			);
 		}
 
