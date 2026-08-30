@@ -50,6 +50,12 @@ export const CONTENT_ROOT = "shirones";
 /**
  * Upstream directories copied into the published package (`dist/src/`).
  * `src/content` is excluded on purpose: it becomes template content instead.
+ *
+ * Keep this list in sync with the theme: every new top-level `src/` directory
+ * that shipped code imports must be added here. `src/user/` carries the
+ * (empty) config-overlay backing module that every `src/config/*.ts` imports
+ * through `config-overlay.ts`; without it the package build cannot resolve
+ * `../user/user-config.ts` and dies during `astro:config:setup`.
  */
 export const PACKAGE_SRC_DIRS = [
 	"assets",
@@ -64,6 +70,7 @@ export const PACKAGE_SRC_DIRS = [
 	"plugins",
 	"styles",
 	"types",
+	"user",
 	"utils",
 ];
 
