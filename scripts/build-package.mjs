@@ -254,6 +254,9 @@ const pkg = {
 	type: "module",
 	description: upstreamPkg.description,
 	license: upstreamPkg.license,
+	// The theme's own package-manager pin, so `init` can echo it into the
+	// user's package.json (see src/integration/cli.mjs).
+	...(upstreamPkg.packageManager ? { packageManager: upstreamPkg.packageManager } : {}),
 	author: PACKAGE_AUTHOR,
 	homepage: PACKAGE_HOMEPAGE,
 	// The published artefact is built and released from *this* repository, and
