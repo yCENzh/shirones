@@ -11,7 +11,7 @@
  *     pnpm build                                (every override must win)
  *
  * Coverage, all asserted:
- *   1. config  — all 22 `shirones/config/*.ts` modules load from the user's
+ *   1. config  — all 23 `shirones/config/*.ts` modules load from the user's
  *                copy (each carries an injected `__OVRMARK__` export, grepped
  *                in the built JS); `siteConfig.title` / `profileConfig.name`
  *                are rewritten to visible "OVR …" strings and must render.
@@ -298,7 +298,11 @@ const dist = join(TEST_DIR, "dist");
 	];
 	const manifest = grepUnique(join(TEST_DIR, ".shirones", "loaded"), /(CFG_[A-Za-z0-9]+)/);
 	const missing = LOADED_CONFIG.filter((m) => !manifest.has(`CFG_${m}`));
-	check(injected.size === 22, `config: all 22 modules injected (got ${injected.size})`);
+	// 23 = every `src/config/*.ts` except `index.ts` + `README.md` (the
+	// templates skip both). Upstream added `contextMenuConfig.ts`, bumping the
+	// count from 22 → 23; when upstream adds/removes a config module, update
+	// this number so drift in the scaffolded config surface stays visible.
+	check(injected.size === 23, `config: all 23 modules injected (got ${injected.size})`);
 	check(missing.length === 0, `config: ${LOADED_CONFIG.length} load-config modules overridden${missing.length ? ` (missing ${missing.join(", ")})` : ""}`);
 	check(grepFiles(dist, "OVR SITE TITLE") > 0, "config: OVR SITE TITLE renders");
 	check(grepFiles(dist, "OVR PROFILE NAME") > 0, "config: OVR PROFILE NAME renders");
