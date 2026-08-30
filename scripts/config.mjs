@@ -19,8 +19,10 @@ export const PACKAGE_NAME = process.env.SHIRONES_PACKAGE_NAME ?? "shirones";
 /**
  * Version to publish. Decided by `scripts/resolve-version.mjs` (patch bump of
  * the latest release on npm, or an explicit request) and passed down through
- * the environment. Falls back to the theme's own version for local runs that
- * skip the resolver.
+ * the environment. Local runs that skip the resolver fall back to the
+ * placeholder `0.0.0` in build-package.mjs — deliberately not the theme's own
+ * version, which describes the source tree and has nothing to do with the
+ * package's release line.
  */
 export const PACKAGE_VERSION = process.env.SHIRONES_PACKAGE_VERSION?.trim() || null;
 

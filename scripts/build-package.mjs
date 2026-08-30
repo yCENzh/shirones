@@ -66,6 +66,15 @@ const shared = {
 	packages: "external",
 	logLevel: "info",
 	sourcemap: false,
+	// The workspace tsconfig.json `extends` "astro/tsconfigs/strict", which is
+	// not installed here (astro is deliberately excluded from this pipeline).
+	// An empty raw tsconfig stops esbuild's automatic tsconfig discovery, so
+	// the "Cannot find base config file" warning disappears. The only fields
+	// in that file that could affect bundling are `baseUrl`/`paths`, and they
+	// are irrelevant here: `packages: "external"` keeps every bare import
+	// (including the `@/` aliases) as an external reference, never bundled.
+	// The output is byte-for-byte unchanged.
+	tsconfigRaw: {},
 };
 
 await build({
