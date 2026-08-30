@@ -10,15 +10,16 @@
  * Instead:
  *   - `SHIRONES_PACKAGE_VERSION=1.2.3` publishes exactly that version;
  *   - otherwise the latest version on npm gets a patch bump;
- *   - if the package has never been published, the theme's version is the seed.
+ *   - if the package name has no published versions, the seed is `0.0.0` —
+ *     deliberately *not* the theme's own version, which describes the source
+ *     tree and would smuggle an unrelated number into a brand-new package.
  *
  * Either way the version must not already exist on npm. Overwriting is
  * impossible anyway, so this fails loudly here rather than at `npm publish`.
  */
 
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { appendFileSync } from "node:fs";
 import { PACKAGE_NAME } from "./config.mjs";
 
 const SEMVER =
@@ -56,13 +57,6 @@ function latestRelease(versions) {
 	return releases[0];
 }
 
-function themeVersion() {
-	const themePkg = resolve("workspace/package.json");
-	if (!existsSync(themePkg)) return null;
-	const version = JSON.parse(readFileSync(themePkg, "utf8")).version;
-	return SEMVER.test(version ?? "") ? version : null;
-}
-
 const requested = (process.env.SHIRONES_PACKAGE_VERSION ?? "").trim();
 const published = publishedVersions();
 
@@ -84,10 +78,10 @@ if (requested) {
 		version = `${latest[0]}.${latest[1]}.${latest[2] + 1}`;
 		reason = `patch bump from ${latest.join(".")}`;
 	} else {
-		version = themeVersion() ?? "0.0.1";
+		version = "0.0.0";
 		reason = published.length
 			? "first release version (only prereleases published so far)"
-			: "first release of this package name";
+			: "no published versions on npm";
 	}
 }
 

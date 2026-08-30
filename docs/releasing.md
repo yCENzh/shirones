@@ -42,8 +42,9 @@ exist so the pipeline is not hard-wired to one branch or one package name.
 2. Otherwise the highest *release* on npm gets a patch bump — `0.0.10` →
    `0.0.11`. Prereleases are ignored when picking the base, so an `rc` sitting
    on top of a release cannot drag the next patch sideways.
-3. If the package name has never been published, the theme's own version seeds
-   the first release.
+3. If the package name has no published versions, the seed is `0.0.0` — *not*
+   the theme's version, which describes the source tree and would smuggle an
+   unrelated number into a brand-new package.
 
 In every case the version must not already exist on npm. It **fails the run**
 rather than skipping the publish: a release that quietly does nothing is worse
@@ -53,8 +54,7 @@ Earlier this pipeline copied the version straight out of the theme's
 `package.json`. That coupled a release to a commit in another repository —
 forget the bump and the run dies at the last step — while the theme's version
 describes the source tree and moves for unrelated reasons. The version is now a
-property of the release, and the theme's version is only a seed for a brand-new
-package name.
+property of the release alone.
 
 The publish job runs in the `npm` environment, so it can additionally be gated
 with required reviewers in repository settings.
@@ -70,10 +70,10 @@ dispatch form — no commit required, and the `CONTENT_ROOT` stays `shirones`
 regardless, so projects scaffolded under a scratch name keep working after the
 switch back.
 
-The name `shirones` already exists on npm as a `0.0.0` placeholder owned by the
-same account, so the first real release under it will resolve to `0.0.1`. Set
-the version input explicitly if the switch should also be a version milestone
-(`1.0.0`).
+With no published versions under `shirones` yet, the first run left at default
+resolves to `0.0.0` (see "Where the version comes from"). Set the version input
+explicitly if the first release should instead be a milestone (`1.0.0`), or if
+you want to start the package at a specific number.
 
 The user-facing directory is **not** renamed: `CONTENT_ROOT` stays `shirones`
 in both packages, so a blog scaffolded with the test package keeps working
@@ -97,12 +97,12 @@ memory-hungry (`astro build` in validation needs several GB):
 
 ```bash
 pnpm install --no-lockfile
-pnpm all                       # sync → build → manifest → validate
+pnpm all                       # sync → templates → build → manifest → validate
 pnpm version:next              # what the next version would be, without publishing
 ```
 
-A local `pnpm all` stamps the theme's version into the package, because the
-resolver only runs in CI. Export `SHIRONES_PACKAGE_VERSION` to pin it.
+A local `pnpm all` stamps `0.0.0` into the package, because the resolver only
+runs in CI. Export `SHIRONES_PACKAGE_VERSION` to pin it.
 
 Override anything with the env vars in [pipeline.md](./pipeline.md#configuration):
 

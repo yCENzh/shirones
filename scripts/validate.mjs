@@ -234,7 +234,31 @@ async function checkDevServer() {
 			throw lastError;
 		};
 
-		const routes = ["/", "/about/", "/archive/", "/posts/guide/", "/moments/", "/rss.xml"];
+		// Pick dev-server routes from what actually exists: hard-coding page
+		// paths (e.g. a specific demo post) breaks the moment upstream renames
+		// or deletes them. Prefer the manifest's static routes, plus one real
+		// article for the dynamic [...slug] route discovered from the scaffold.
+		const staticPatterns = new Set(manifest.routes.map((route) => route.pattern));
+		// Manifest patterns have no trailing slash; match against those.
+		const routes = ["/", "/about", "/archive", "/moments", "/rss.xml"].filter(
+			(pattern) => staticPatterns.has(pattern),
+		);
+
+		const postsPattern = manifest.routes.find(
+			(route) =>
+				route.pattern.startsWith("/posts/") && route.pattern.includes("[...slug]"),
+		)?.pattern;
+		const postsDir = join(TEST_DIR, CONTENT_ROOT, "content", "posts");
+		const firstPost = existsSync(postsDir)
+			? (await readdir(postsDir)).find((name) => /\.(md|mdx)$/.test(name))
+			: undefined;
+		if (postsPattern && firstPost) {
+			routes.push(
+				postsPattern.replace("[...slug]", firstPost.replace(/\.(md|mdx)$/, "")),
+			);
+		}
+
+		if (routes.length === 0) fail("no dev-server routes could be selected");
 		for (const route of routes) {
 			const response = await get(route);
 			const body = await response.text();

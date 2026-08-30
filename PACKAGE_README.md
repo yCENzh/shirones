@@ -86,6 +86,13 @@ shirones({
 See `manifest.json` inside the package for the full list of overridable
 components, layouts and config modules.
 
+## Importing from the package
+
+Only import from the documented entry points (`shirones`,
+`shirones/collections`, `shirones/types/*`). Deep `shirones/src/...` paths are
+internal implementation detail and may move between releases; mirror the
+theme's structure in your own `src/` tree instead.
+
 ## Options
 
 ```js

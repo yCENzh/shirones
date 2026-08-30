@@ -28,11 +28,10 @@ LyraVoid/Shirone @ $SHIRONES_UPSTREAM_REF
 Decides which version this release publishes and exports it as
 `SHIRONES_PACKAGE_VERSION` for the steps that follow. Explicit request wins;
 otherwise the highest *release* on npm is patch-bumped (prereleases are ignored
-when picking the base); an unpublished package name is seeded from the theme's
-version. A version that already exists on npm aborts the run.
+when picking the base); a package name with no published versions seeds `0.0.0`.
+A version that already exists on npm aborts the run.
 
-In CI it runs after the sync, so the theme's version is available as a seed. It
-is not part of `pnpm all` — a local run stamps the theme's version unless
+It is not part of `pnpm all` — a local run stamps `0.0.0` unless
 `SHIRONES_PACKAGE_VERSION` is exported.
 
 ## 1. `pnpm sync` — `scripts/sync-from-upstream.mjs`
@@ -100,7 +99,8 @@ Assembles `dist/`:
 - Copies `PACKAGE_README.md` in as the npm landing page.
 
 The version written into `package.json` comes from `SHIRONES_PACKAGE_VERSION`,
-falling back to the theme's version when the resolver has not run.
+falling back to `0.0.0` when the resolver has not run (a local build stamps a
+placeholder — the real number is always the resolver's job).
 
 Dependency handling is where this step earns its keep, and the rules are
 non-negotiable:

@@ -76,5 +76,6 @@ they are worth changing.
 Keeping the source upstream means:
 
 - contributors only ever edit one repository;
-- the package version always tracks the theme version;
+- the package version is decided by the release pipeline (`resolve-version.mjs`),
+  never inherited from the theme;
 - `workspace/` and `dist/` stay disposable and are `.gitignore`d.

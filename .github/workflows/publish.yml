@@ -1,30 +1,26 @@
 name: Build & Publish
 
-# Manual only. There is nothing in this repository that needs to be rebuilt
-# when *this* repository changes -- the package contents come from the upstream
-# theme -- so a push trigger would only produce noise and accidental releases.
-# Release when you decide to release: Actions -> Build & Publish -> Run workflow.
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Version to publish (blank = patch bump of the latest release on npm)"
+        description: "Version to publish (e.g. patch bump of latest npm release)"
         required: false
         default: ""
       ref:
-        description: "Theme branch/tag to package (blank = feat/npm-package)"
+        description: "Upstream branch/tag to package (e.g. feat/npm-package)"
         required: false
         default: ""
       upstream-repo:
-        description: "Theme repository clone URL (blank = yCENzh/shirone)"
+        description: "Upstream clone URL (e.g. https://github.com/yCENzh/Shirone.git)"
         required: false
         default: ""
       package-name:
-        description: "npm package name to publish as (blank = shirones-test)"
+        description: "npm package name (e.g. shirones)"
         required: false
         default: ""
       dry-run:
-        description: "Rehearsal: build + validate, publish nothing"
+        description: "Rehearsal: build & validate, publish nothing"
         type: boolean
         default: false
 
@@ -34,138 +30,78 @@ concurrency:
 
 permissions:
   contents: read
+  # required by `npm publish --provenance`
+  id-token: write
 
-# Every input falls back to the normal day-to-day value, so "Run workflow" with
-# everything left untouched is the standard release.
 env:
   SHIRONES_UPSTREAM_REPO: ${{ github.event.inputs.upstream-repo || 'https://github.com/LyraVoid/Shirone.git' }}
   SHIRONES_UPSTREAM_REF: ${{ github.event.inputs.ref || 'main' }}
   SHIRONES_PACKAGE_NAME: ${{ github.event.inputs.package-name || 'shirones' }}
-  # Blank means "decide automatically"; resolve-version.mjs fills it in and
-  # exports the decision to every later step.
   SHIRONES_PACKAGE_VERSION: ${{ github.event.inputs.version }}
-  # Pin the pnpm store so it can be cached as one directory. Both this
-  # repository's install and the scratch project validate builds in /tmp share
-  # it, and both live on the runner's root filesystem, so hardlinking works.
-  PNPM_CONFIG_STORE_DIR: ${{ github.workspace }}/.pnpm-store
 
 jobs:
   build:
-    name: Build & validate
+    name: Build & publish
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      package: ${{ steps.meta.outputs.package }}
-      upstream-sha: ${{ steps.meta.outputs.upstream_sha }}
+    environment: npm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      # pnpm/setup is the successor to pnpm/action-setup for pnpm 11+: it drops
-      # in the self-contained pnpm binary and installs the JS runtime in the
-      # same step, so no separate actions/setup-node is needed here.
-      #
-      # - no `version:` -- `packageManager` in package.json is the single source
-      #   of truth, and passing both makes the action abort.
-      # - `install: false` -- the action would otherwise run a plain
-      #   `pnpm install`; this repository commits no lockfile on purpose (one
-      #   dependency, and the format shifts between pnpm majors), so the install
-      #   below passes --no-lockfile explicitly.
-      # - no `cache:` -- its cache key hashes a lockfile, and the lockfile worth
-      #   keying on (the theme's) does not exist until the sync step. The store
-      #   is cached explicitly below instead.
+      # install defaults to true; .npmrc `lockfile=false` makes the built-in
+      # `pnpm install` equivalent to `pnpm install --no-lockfile`
       - name: Set up pnpm and Node
         uses: pnpm/setup@v2
         with:
+          version: 11.24.0
           runtime: node@24
-          install: false
-
-      - name: Install pipeline dependencies
-        run: pnpm install --no-lockfile
+          # no cache: — its cache key hashes a lockfile, and the lockfile worth keying on (the theme's) does not exist until the sync step.
+          cache: false
 
       - name: Sync theme source from upstream
         run: pnpm sync
-
-      # Restored after the sync so the key can hash the theme's lockfile: the
-      # expensive install is the scratch project in `pnpm validate`, which
-      # installs the theme's whole dependency tree. A miss falls back to the
-      # newest store from a previous run, which still covers most packages.
-      - name: Cache the pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.PNPM_CONFIG_STORE_DIR }}
-          key: pnpm-store-${{ runner.os }}-${{ hashFiles('workspace/pnpm-lock.yaml') }}
-          restore-keys: pnpm-store-${{ runner.os }}-
-
-      # Decides the version, verifies it is not already on npm, and exports it
-      # so the build stamps it into the published package.json.
       - name: Resolve version
         id: version
         run: node scripts/resolve-version.mjs
-
       - name: Prepare user templates
         run: pnpm templates
-
       - name: Build package
         run: pnpm build
-
       - name: Generate manifest
         run: pnpm manifest
-
       - name: Validate package end to end
         run: pnpm validate
-
-      - name: Collect metadata
-        id: meta
-        run: |
-          PACKAGE=$(node -p "require('./dist/package.json').name")
-          SHA=$(cat workspace/.synced-sha)
-          echo "package=$PACKAGE"  >> "$GITHUB_OUTPUT"
-          echo "upstream_sha=$SHA" >> "$GITHUB_OUTPUT"
 
       - name: Summary
         run: |
           {
-            echo "### ${{ steps.meta.outputs.package }}@${{ steps.version.outputs.version }}"
+            echo "### $(node -p "require('./dist/package.json').name")@${{ steps.version.outputs.version }}"
             echo
             echo "| field | value |"
             echo "| --- | --- |"
-            echo "| upstream ref | \`$SHIRONES_UPSTREAM_REF\` |"
-            echo "| upstream sha | \`${{ steps.meta.outputs.upstream_sha }}\` |"
+            echo "| repo | \`$SHIRONES_UPSTREAM_REPO\` |"
+            echo "| ref | \`$SHIRONES_UPSTREAM_REF\` |"
+            echo "| commit | \`$(cat workspace/.synced-sha)\` |"
             echo "| routes | $(node -p "require('./dist/manifest.json').counts.routes") |"
             echo "| components | $(node -p "require('./dist/manifest.json').counts.components") |"
-            echo "| tarball | $(du -sh dist | cut -f1) |"
+            echo "| dist size | $(du -sh dist | cut -f1) |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      # Only worth the bytes when nothing is published: a real release is
+      # already on npm, a dry-run needs the tarball to inspect.
+      - name: Upload build output
+        if: ${{ inputs.dry-run }}
+        uses: actions/upload-artifact@v7
         with:
           name: npm-package
           path: dist/
           retention-days: 14
 
-  publish:
-    name: Publish to npm
-    needs: build
-    if: ${{ !inputs.dry-run }}
-    runs-on: ubuntu-latest
-    environment: npm
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: npm-package
-          path: dist/
-
-      # Still actions/setup-node here, not pnpm/setup: this job publishes with
-      # `npm publish`, and it needs `registry-url` to write the .npmrc that
-      # picks up NODE_AUTH_TOKEN. pnpm/setup has no equivalent input.
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          registry-url: https://registry.npmjs.org
-
       - name: Publish
-        run: npm publish ./dist --provenance --access public
+        if: ${{ !inputs.dry-run }}
+        run: |
+          if [ -n "${NPM_TOKEN}" ]; then
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          fi
+          npm publish ./dist --provenance --access public
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

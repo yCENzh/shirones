@@ -137,6 +137,37 @@ const dataCount = await copyWithRewrites(
 );
 console.log(`[templates] config/data: ${dataCount} files`);
 
+// ── 2b. Rewrite self-check ──────────────────────────────────────────────────
+// Every `../<dir>/` escape from `src/config` and `src/data` that points into a
+// theme directory is rewritten above (`../data/` → `./data/`, `../types/` →
+// `@/types/`, `../config/` → `../`). Any such import surviving the rewrite
+// means upstream added a relative-import shape the rules do not cover. Fail
+// here rather than letting the user's build die with an opaque resolution
+// error. A bare `../file` (data → sibling config) is the one legal escape.
+const ESCAPED_IMPORT =
+	/from\s+["']\.\.\/(types|utils|constants|i18n|generated|components|layouts|styles|assets|plugins|data|config)\//;
+async function assertNoEscapedImports(dir) {
+	if (!existsSync(dir)) return;
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
+		const full = join(dir, entry.name);
+		if (entry.isDirectory()) {
+			await assertNoEscapedImports(full);
+			continue;
+		}
+		if (!SOURCE_EXTENSIONS.has(extname(entry.name))) continue;
+		const source = await readFile(full, "utf8");
+		const match = source.match(ESCAPED_IMPORT);
+		if (match) {
+			throw new Error(
+				`[templates] ${full} still imports ${match[0]} upward — the rewrite ` +
+					"rules in prepare-templates.mjs do not cover this shape. Add a rule " +
+					"before publishing.",
+			);
+		}
+	}
+}
+await assertNoEscapedImports(join(TEMPLATE_DIR, CONTENT_ROOT, "config"));
+
 // ── 3. Content ──────────────────────────────────────────────────────────────
 /**
  * Rewrites applied to the example articles.

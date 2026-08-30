@@ -39,7 +39,7 @@ const upstreamPkg = JSON.parse(
 	await readFile(join(WORKSPACE_DIR, "package.json"), "utf8"),
 );
 
-console.log(`[build] packaging ${PACKAGE_NAME}@${PACKAGE_VERSION ?? upstreamPkg.version}`);
+console.log(`[build] packaging ${PACKAGE_NAME}@${PACKAGE_VERSION ?? "0.0.0"}`);
 
 // `dist/template` is produced by the previous step; keep it if present.
 const templateDir = join(DIST_DIR, "template");
@@ -241,7 +241,7 @@ if (PACKAGE_NAME !== "shirones") bin[PACKAGE_NAME] = "./bin/cli.mjs";
 
 const pkg = {
 	name: PACKAGE_NAME,
-	version: PACKAGE_VERSION ?? upstreamPkg.version,
+	version: PACKAGE_VERSION ?? "0.0.0",
 	type: "module",
 	description: upstreamPkg.description,
 	license: upstreamPkg.license,
@@ -258,6 +258,9 @@ const pkg = {
 		".": { types: "./index.d.ts", default: "./index.js" },
 		"./collections": { types: "./collections.d.ts", default: "./collections.js" },
 		"./types/*": "./src/types/*",
+		// `./src/*` and `./template/*` exist so the Vite-side theme source and
+		// the init templates are reachable; both are internal and not part of
+		// the public API — see PACKAGE_README.md.
 		"./src/*": "./src/*",
 		"./template/*": "./template/*",
 		"./package.json": "./package.json",
@@ -307,7 +310,7 @@ await writeFile(
 	`${JSON.stringify(
 		{
 			package: PACKAGE_NAME,
-			version: PACKAGE_VERSION ?? upstreamPkg.version,
+			version: PACKAGE_VERSION ?? "0.0.0",
 			upstreamSha: sha,
 			builtAt: new Date().toISOString(),
 			node: process.version,

@@ -7,20 +7,35 @@
  */
 
 import { existsSync } from "node:fs";
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { extname, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { build } from "esbuild";
 import { CONTENT_ROOT, PACKAGE_NAME } from "./config.mjs";
 
 const DIST_DIR = resolve("dist");
+const WORKSPACE_DIR = resolve("workspace");
 const SRC_DIR = join(DIST_DIR, "src");
 
-/** Mirror of `src/integration/routes.ts` — keep the two in sync. */
-function toRoutePattern(relativePath) {
-	let route = relativePath.replace(/\\/g, "/");
-	route = route.replace(/\.(astro|ts|js|mdx|md)$/, "");
-	route = route.replace(/(^|\/)index$/, "");
-	if (!route.startsWith("/")) route = `/${route}`;
-	return route === "/" ? "/" : route.replace(/\/+$/, "");
+/**
+ * Load the theme's own route collector instead of re-implementing its
+ * page→pattern rules here. The two used to be mirrored copies that drifted;
+ * bundling `routes.ts` keeps `collectRoutes` a single source of truth.
+ */
+async function loadRouteCollector() {
+	const result = await build({
+		entryPoints: [join(WORKSPACE_DIR, "src/integration/routes.ts")],
+		bundle: true,
+		write: false,
+		format: "esm",
+		platform: "node",
+		logLevel: "silent",
+	});
+	const file = join(DIST_DIR, ".routes.mjs");
+	await writeFile(file, result.outputFiles[0].text, "utf8");
+	const module = await import(pathToFileURL(file).href);
+	await rm(file, { force: true });
+	return module;
 }
 
 async function walk(dir, predicate) {
@@ -38,32 +53,12 @@ async function walk(dir, predicate) {
 	return found;
 }
 
-const PAGE_EXTENSIONS = [".astro", ".ts", ".js", ".md", ".mdx"];
+const { collectRoutes } = await loadRouteCollector();
 
-/** Documentation that lives alongside pages but must never become a route. */
-const DOC_FILENAMES = new Set([
-	"AGENTS.md",
-	"README.md",
-	"CONTRIBUTING.md",
-	"LICENSE.md",
-]);
-
-const pagesDir = join(SRC_DIR, "pages");
-const pageFiles = await walk(
-	pagesDir,
-	(name) =>
-		!name.startsWith("_") &&
-		!name.endsWith(".d.ts") &&
-		!DOC_FILENAMES.has(name) &&
-		PAGE_EXTENSIONS.includes(extname(name)),
-);
-
-const routes = pageFiles
-	.map((file) => {
-		const rel = relative(pagesDir, file).replace(/\\/g, "/");
-		return { pattern: toRoutePattern(rel), source: `src/pages/${rel}` };
-	})
-	.sort((a, b) => a.pattern.localeCompare(b.pattern));
+const routes = collectRoutes(join(SRC_DIR, "pages")).map((route) => ({
+	pattern: route.pattern,
+	source: `src/pages/${route.source}`,
+}));
 
 /**
  * Overridable components. The key is what a user mirrors under
