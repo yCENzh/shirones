@@ -245,8 +245,11 @@ console.log(`[build] dependency scan clean (${Object.keys(dependencies).length} 
 // ── 6. package.json ─────────────────────────────────────────────────────────
 // Register the CLI under both `shirones` and the published package name so
 // `pnpm ${PACKAGE_NAME} init` works alongside `npx shirones init`.
-const bin = { shirones: "./bin/cli.mjs" };
-if (PACKAGE_NAME !== "shirones") bin[PACKAGE_NAME] = "./bin/cli.mjs";
+// No `./` prefix: npm's publisher normalises a leading `./` away anyway and
+// logs a misleading "bin[...] was invalid and removed" warning for it, so
+// write the already-normalised form and stay warning-free.
+const bin = { shirones: "bin/cli.mjs" };
+if (PACKAGE_NAME !== "shirones") bin[PACKAGE_NAME] = "bin/cli.mjs";
 
 // Pin the published package to the pnpm that actually builds it — `init`
 // echoes this into the user's package.json so a fresh project pins the same

@@ -47,8 +47,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      # install defaults to true; .npmrc `lockfile=false` makes the built-in
-      # `pnpm install` equivalent to `pnpm install --no-lockfile`
+      # install defaults to true; with the committed pnpm-lock.yaml the
+      # built-in `pnpm install` resolves the pipeline deps (esbuild) in one
+      # step, verified against the lockfile.
       - name: Set up pnpm and Node
         uses: pnpm/setup@v2
         with:
@@ -56,9 +57,10 @@ jobs:
           # (and therefore every `init`-scaffolded project) pins exactly this
           # version, which build-package.mjs captures via `pnpm --version`.
           version: latest
-          runtime: node@24
-          # no cache: — its cache key hashes a lockfile, and the lockfile worth keying on (the theme's) does not exist until the sync step.
-          cache: false
+          runtime: node@lts
+          install: true
+          # Cache the pnpm store, keyed on the committed pnpm-lock.yaml.
+          cache: true
 
       - name: Sync theme source from upstream
         run: pnpm sync

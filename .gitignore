@@ -3,5 +3,4 @@ workspace/
 dist/
 .upstream/
 .validate/
-pnpm-lock.yaml
 *.log
