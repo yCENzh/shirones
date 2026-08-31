@@ -76,35 +76,34 @@ jobs:
 
       - name: Summary
         run: |
-          {
-            echo "### $(node -p "require('./dist/package.json').name")@${{ steps.version.outputs.version }}"
-            echo
-            echo "| field | value |"
-            echo "| --- | --- |"
-            echo "| repo | \`$SHIRONES_UPSTREAM_REPO\` |"
-            echo "| ref | \`$SHIRONES_UPSTREAM_REF\` |"
-            echo "| commit | \`$(cat workspace/.synced-sha)\` |"
-            echo "| routes | $(node -p "require('./dist/manifest.json').counts.routes") |"
-            echo "| components | $(node -p "require('./dist/manifest.json').counts.components") |"
-            echo "| dist size | $(du -sh dist | cut -f1) |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ### $(node -p "require('./dist/package.json').name")@${{ steps.version.outputs.version }}
 
-      # Only worth the bytes when nothing is published: a real release is
-      # already on npm, a dry-run needs the tarball to inspect.
-      - name: Upload build output
-        if: ${{ inputs.dry-run }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: npm-package
-          path: dist/
-          retention-days: 14
+          | field | value |
+          | --- | --- |
+          | repo | \`$SHIRONES_UPSTREAM_REPO\` |
+          | ref | \`$SHIRONES_UPSTREAM_REF\` |
+          | commit | \`$(cat workspace/.synced-sha)\` |
+          | routes | $(node -p "require('./dist/manifest.json').counts.routes") |
+          | components | $(node -p "require('./dist/manifest.json').counts.components") |
+          | dist size | $(du -sh dist | cut -f1) |
+          EOF
 
-      - name: Publish
-        if: ${{ !inputs.dry-run }}
-        run: |
-          if [ -n "${NPM_TOKEN}" ]; then
-            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          fi
-          npm publish ./dist --provenance --access public
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - parallel:
+        - name: Upload build output
+          uses: actions/upload-artifact@v7
+          with:
+            name: npm-package
+            path: dist/
+            retention-days: 14
+
+        - name: Publish
+          if: ${{ !inputs.dry-run }}
+          run: |
+            pnpm add -g npm
+            if [ -n "${NPM_TOKEN}" ]; then
+              echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+            fi
+            npm publish ./dist --provenance --access public --loglevel=warn
+          env:
+            NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
