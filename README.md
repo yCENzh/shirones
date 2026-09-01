@@ -11,8 +11,7 @@ LyraVoid/Shirone (theme + src/integration/)
    workspace/                     synced checkout
         │
         ├─ prepare-templates.mjs  → dist/template/   (what `init` copies)
-        ├─ build-package.mjs      → dist/            (the npm tarball)
-        ├─ generate-manifest.mjs  → dist/manifest.json
+        ├─ build-package.mjs      → dist/ + manifest.json (the npm tarball)
         └─ validate.mjs           → real install + init + astro build
         │
         ▼
@@ -24,10 +23,8 @@ LyraVoid/Shirone (theme + src/integration/)
 | Script | Purpose |
 | --- | --- |
 | `pnpm version:next` | Decide the version to publish (patch bump, or an explicit one) |
-| `pnpm sync` | Clone the upstream theme into `workspace/` |
-| `pnpm templates` | Build `dist/template/`, rewriting imports for the user layout |
-| `pnpm build` | Bundle the integration, copy theme source, write `package.json` |
-| `pnpm manifest` | Emit the route/override manifest |
+| `pnpm templates` | Clone the upstream theme into `workspace/`, then build `dist/template/`, rewriting imports for the user layout |
+| `pnpm build` | Bundle the integration, copy theme source, write `package.json` and the route/override `manifest.json` |
 | `pnpm validate` | Install into a scratch project, run `init`, then `astro build` |
 
 Run the whole thing with `pnpm all`.
@@ -37,7 +34,7 @@ Run the whole thing with `pnpm all`.
 | Document | What it covers |
 | --- | --- |
 | [docs/releasing.md](docs/releasing.md) | How to cut a release, what each workflow input means, promoting to the production package name |
-| [docs/pipeline.md](docs/pipeline.md) | What each of the five scripts does, the import-rewrite rules, the dependency rules, every env var |
+| [docs/pipeline.md](docs/pipeline.md) | What each pipeline script does, the import-rewrite rules, the dependency rules, every env var |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Failures that have actually happened here and what they meant |
 | [AGENTS.md](AGENTS.md) | Conventions for automated contributors |
 | [PACKAGE_README.md](PACKAGE_README.md) | The README shipped to npm, i.e. what users read |

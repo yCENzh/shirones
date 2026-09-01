@@ -20,9 +20,8 @@
 | --- | --- |
 | Upstream repo/ref, package name, excluded deps | `scripts/config.mjs` |
 | Version selection | `scripts/resolve-version.mjs` |
-| Import rewriting for the user-facing template | `scripts/prepare-templates.mjs` |
-| Bundling + `package.json` generation | `scripts/build-package.mjs` |
-| Route/override manifest | `scripts/generate-manifest.mjs` |
+| Upstream sync + import rewriting for the user-facing template | `scripts/prepare-templates.mjs` |
+| Bundling + `package.json` + route/override manifest | `scripts/build-package.mjs` |
 | End-to-end install test | `scripts/validate.mjs` |
 | CI | `.github/workflows/publish.yml` |
 
@@ -35,7 +34,7 @@ touching the pipeline:
 | --- | --- |
 | `README.md` | Overview and the map of everything else |
 | `docs/releasing.md` | Release procedure and the meaning of each workflow input |
-| `docs/pipeline.md` | The five scripts in detail, rewrite rules, env vars |
+| `docs/pipeline.md` | The pipeline scripts in detail, rewrite rules, env vars |
 | `docs/troubleshooting.md` | Failures already diagnosed — add to it rather than rediscovering |
 | `PACKAGE_README.md` | Shipped to npm; user-facing, not maintainer-facing |
 
@@ -46,28 +45,28 @@ here constrains how theme code must be written, it belongs there too.
 
 Manual dispatch only — the push trigger was removed on purpose so that editing
 this repository never publishes. `pnpm/setup@v2` (not `pnpm/action-setup`)
-installs pnpm 11 plus Node in one step; the publish job still uses
-`actions/setup-node` because it needs `registry-url` to write the auth `.npmrc`.
+installs pnpm plus Node and runs `pnpm install` in one step; the publish step
+installs npm globally (`pnpm add -g npm`) and writes the auth `.npmrc` from
+`NPM_TOKEN`.
 
 The published version is **not** the theme's version: `resolve-version.mjs`
 patch-bumps the latest release on npm, or takes the workflow's version input,
-and fails if that version already exists. The pnpm store is pinned with
-`PNPM_CONFIG_STORE_DIR` and cached with a key hashing the synced theme's
-lockfile, which is why the cache step sits after `pnpm sync`.
+and fails if that version already exists. The pnpm store cache is keyed on the
+committed `pnpm-lock.yaml`.
 
 ## Route patterns
 
-`generate-manifest.mjs` reimplements the route-pattern derivation from
-`src/integration/routes.ts` upstream. If one changes, change both.
+The manifest step in `build-package.mjs` bundles upstream's
+`src/integration/routes.ts` (via esbuild) rather than re-implementing its
+page→pattern rules, so there is exactly one source of truth for route
+discovery.
 
 ## Local run
 
 ```sh
 pnpm install
-pnpm sync
 pnpm templates
 pnpm build
-pnpm manifest
 SHIRONES_VALIDATE_BUILD=0 pnpm validate   # full build needs ~4 GB RAM
 ```
 

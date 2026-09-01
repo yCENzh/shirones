@@ -62,17 +62,13 @@ jobs:
           # Cache the pnpm store, keyed on the committed pnpm-lock.yaml.
           cache: true
 
-      - name: Sync theme source from upstream
-        run: pnpm sync
       - name: Resolve version
         id: version
         run: node scripts/resolve-version.mjs
-      - name: Prepare user templates
+      - name: Sync upstream and prepare user templates
         run: pnpm templates
-      - name: Build package
+      - name: Build package and manifest
         run: pnpm build
-      - name: Generate manifest
-        run: pnpm manifest
       - name: Validate package end to end
         run: pnpm validate
 

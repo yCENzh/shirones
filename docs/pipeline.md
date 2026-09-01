@@ -1,6 +1,6 @@
 # Pipeline
 
-Five scripts turn a checkout of the theme into a publishable tarball. They run
+Four scripts turn a checkout of the theme into a publishable tarball. They run
 in order and each one only reads what the previous one produced, so any step
 can be re-run on its own while debugging.
 
@@ -9,15 +9,11 @@ LyraVoid/Shirone @ $SHIRONES_UPSTREAM_REF
         │
    0. version:next → the version to publish (patch bump, or an explicit request)
         │
-   1. sync         → workspace/            plain git checkout of the theme
+   1. templates    → workspace/ + dist/template/   sync checkout; what `shirones init` copies
         │
-   2. templates    → dist/template/        what `shirones init` copies
+   2. build        → dist/ + manifest.json         the tarball: integration + src/ + package.json
         │
-   3. build        → dist/                 the tarball: integration + src/ + package.json
-        │
-   4. manifest     → dist/manifest.json    inventory of routes/components/config
-        │
-   5. validate     → /tmp scratch project  real install + init + astro build + dev smoke
+   3. validate     → /tmp scratch project  real install + init + astro build + dev smoke
         │
         ▼
    npm publish --provenance
@@ -34,19 +30,18 @@ A version that already exists on npm aborts the run.
 It is not part of `pnpm all` — a local run stamps `0.0.0` unless
 `SHIRONES_PACKAGE_VERSION` is exported.
 
-## 1. `pnpm sync` — `scripts/sync-from-upstream.mjs`
+## 1. `pnpm templates` — `scripts/prepare-templates.mjs`
 
-`git clone --depth 1 --branch $SHIRONES_UPSTREAM_REF $SHIRONES_UPSTREAM_REPO
-workspace/`, then records the resolved commit in `workspace/.synced-sha` so the
-run summary can state exactly what was packaged.
+First syncs upstream: `git clone --depth 1 --branch $SHIRONES_UPSTREAM_REF
+$SHIRONES_UPSTREAM_REPO`, then copies the checkout into `workspace/` and
+records the resolved commit in `workspace/.synced-sha` so the run summary can
+state exactly what was packaged.
 
 This repository stores **no theme source**. If `workspace/` exists it is
 removed first — there is no incremental mode, and stale state is never a
 possible explanation for a bad build.
 
-## 2. `pnpm templates` — `scripts/prepare-templates.mjs`
-
-Produces the tree that `shirones init` copies into a fresh project:
+Then it produces the tree that `shirones init` copies into a fresh project:
 
 ```text
 dist/template/
@@ -86,17 +81,21 @@ resolves paths against the *project* root, not the package:
 Configs stay **TypeScript**, importing their types from the package, so users
 keep full autocomplete and the field set matches the theme exactly.
 
-## 3. `pnpm build` — `scripts/build-package.mjs`
+## 2. `pnpm build` — `scripts/build-package.mjs`
 
 Assembles `dist/`:
 
 - Bundles `src/integration/` with esbuild into the package entry point.
 - Copies the theme's `src/` directories listed in `PACKAGE_SRC_DIRS`
-  (`src/content` is excluded — it became template content in step 2).
+  (`src/content` is excluded — it became template content in step 1).
 - Writes the published `package.json`: name from `PACKAGE_NAME`, version copied
   from the theme, `exports` map, `bin` for the CLI, and the dependency sets from
   `scripts/config.mjs`.
 - Copies `PACKAGE_README.md` in as the npm landing page.
+- Emits `dist/manifest.json`: every injected route, every overridable component
+  and layout, every config module and data module, with counts. The CI summary
+  prints the counts so an accidental drop (a route that stopped being
+  discovered) is visible in the run without diffing tarballs.
 
 The version written into `package.json` comes from `SHIRONES_PACKAGE_VERSION`,
 falling back to `0.0.0` when the resolver has not run (a local build stamps a
@@ -117,18 +116,10 @@ non-negotiable:
   sets (astro-icon uses `require.resolve` outside Vite).
   `shirones init` installs them all, so users still run one command.
 - A missing `exports` entry surfaces later as an opaque *"X is not a function"*
-  in the user's build, so the entries are validated in step 5 rather than
+  in the user's build, so the entries are validated in step 3 rather than
   trusted.
 
-## 4. `pnpm manifest` — `scripts/generate-manifest.mjs`
-
-Writes `dist/manifest.json`: every injected route, every overridable component
-and layout, every config module and data module, with counts. The integration
-reads it at runtime for override resolution, and the CI summary prints the
-counts so an accidental drop (a route that stopped being discovered) is visible
-in the run without diffing tarballs.
-
-## 5. `pnpm validate` — `scripts/validate.mjs`
+## 3. `pnpm validate` — `scripts/validate.mjs`
 
 The only step that proves the package actually works:
 

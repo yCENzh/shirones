@@ -5,13 +5,11 @@
   "type": "module",
   "description": "Build & publish pipeline for the shirones npm package",
   "scripts": {
-    "sync": "node scripts/sync-from-upstream.mjs",
     "version:next": "node scripts/resolve-version.mjs",
     "templates": "node scripts/prepare-templates.mjs",
     "build": "node scripts/build-package.mjs",
-    "manifest": "node scripts/generate-manifest.mjs",
     "validate": "node scripts/validate.mjs",
-    "all": "pnpm sync && pnpm templates && pnpm build && pnpm manifest && pnpm validate"
+    "all": "pnpm templates && pnpm build && pnpm validate"
   },
   "dependencies": {
     "esbuild": "^0.28.2"

@@ -1,5 +1,5 @@
 /**
- * Step 3 — assemble the publishable package in `dist/`.
+ * Step 2 — assemble the publishable package in `dist/` and emit its manifest.
  *
  * Layout produced here:
  *
@@ -10,16 +10,19 @@
  *     src/**            theme source consumed by Vite at build time
  *     template/**       files copied into a user's project by `init`
  *     types/**          hand-maintained public type declarations
+ *     manifest.json     inventory of routes and overridable files
  *     package.json
  */
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { chmod, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { extname, join, resolve } from "node:path";
+import { extname, join, relative, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import {
 	ALIAS_PREFIXES,
+	CONTENT_ROOT,
 	EXCLUDED_DEPENDENCIES,
 	EXTRA_DEPENDENCIES,
 	IGNORED_IMPORTS,
@@ -349,6 +352,121 @@ await writeFile(
 	)}\n`,
 	"utf8",
 );
+
+// ── 9. Manifest ─────────────────────────────────────────────────────────────
+// Emit `dist/manifest.json`: every injected route, every overridable component
+// and layout, and every config/data module a user can shadow, with counts. It
+// is both a debugging aid and the data source for the override documentation;
+// validate.mjs also asserts the build emits the routes the manifest promises.
+// (Folded in from the former scripts/generate-manifest.mjs.)
+
+const SRC_DIR = join(DIST_DIR, "src");
+
+/** Load the theme's own route collector instead of re-implementing its
+ * page→pattern rules here — a mirrored copy used to drift. */
+async function loadRouteCollector() {
+	const result = await build({
+		entryPoints: [join(WORKSPACE_DIR, "src/integration/routes.ts")],
+		bundle: true,
+		write: false,
+		format: "esm",
+		platform: "node",
+		logLevel: "silent",
+	});
+	const file = join(DIST_DIR, ".routes.mjs");
+	await writeFile(file, result.outputFiles[0].text, "utf8");
+	const module = await import(pathToFileURL(file).href);
+	await rm(file, { force: true });
+	return module;
+}
+
+async function walk(dir, predicate) {
+	if (!existsSync(dir)) return [];
+	const found = [];
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
+		const full = join(dir, entry.name);
+		if (entry.isDirectory()) {
+			if (entry.name.startsWith("_")) continue;
+			found.push(...(await walk(full, predicate)));
+		} else if (predicate(entry.name)) {
+			found.push(full);
+		}
+	}
+	return found;
+}
+
+const { collectRoutes } = await loadRouteCollector();
+
+const routes = collectRoutes(join(SRC_DIR, "pages")).map((route) => ({
+	pattern: route.pattern,
+	source: `src/pages/${route.source}`,
+}));
+
+/** Overridable components. The key is what a user mirrors under `src/`. */
+async function collectOverridables(dir, prefix) {
+	const files = await walk(dir, (name) => [".astro", ".svelte"].includes(extname(name)));
+	return files
+		.map((file) => {
+			const rel = relative(dir, file).replace(/\\/g, "/");
+			return {
+				key: `${prefix}${rel.replace(/\.(astro|svelte)$/, "")}`,
+				overrideWith: `src/${prefix ? "layouts" : "components"}/${rel}`,
+			};
+		})
+		.sort((a, b) => a.key.localeCompare(b.key));
+}
+
+const components = await collectOverridables(join(SRC_DIR, "components"), "");
+const layouts = await collectOverridables(join(SRC_DIR, "layouts"), "layouts/");
+
+// Config modules a user can shadow in `<CONTENT_ROOT>/config/`.
+const configDir = join(SRC_DIR, "config");
+const configModules = (
+	await walk(configDir, (name) => extname(name) === ".ts" && name !== "index.ts")
+)
+	.map((file) => relative(configDir, file).replace(/\\/g, "/").replace(/\.ts$/, ""))
+	.sort();
+
+const dataDir = join(SRC_DIR, "data");
+const dataModules = (await walk(dataDir, (name) => extname(name) === ".ts"))
+	.map((file) => relative(dataDir, file).replace(/\\/g, "/").replace(/\.ts$/, ""))
+	.sort();
+
+const manifest = {
+	package: PACKAGE_NAME,
+	version: pkg.version,
+	contentRoot: CONTENT_ROOT,
+	routes,
+	overrides: {
+		components,
+		layouts,
+		config: configModules.map((name) => ({
+			key: name,
+			overrideWith: `${CONTENT_ROOT}/config/${name}.ts`,
+		})),
+		data: dataModules.map((name) => ({
+			key: name,
+			overrideWith: `${CONTENT_ROOT}/config/data/${name}.ts`,
+		})),
+	},
+	counts: {
+		routes: routes.length,
+		components: components.length,
+		layouts: layouts.length,
+		config: configModules.length,
+		data: dataModules.length,
+	},
+};
+
+await writeFile(
+	join(DIST_DIR, "manifest.json"),
+	`${JSON.stringify(manifest, null, 2)}\n`,
+	"utf8",
+);
+console.log("[build] manifest.json");
+for (const [key, value] of Object.entries(manifest.counts)) {
+	console.log(`  ${key.padEnd(11)} ${value}`);
+}
 
 // Report the final size so regressions are visible in CI logs.
 try {

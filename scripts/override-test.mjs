@@ -32,7 +32,7 @@
  *   SHIRONES_UPSTREAM_REPO / SHIRONES_UPSTREAM_REF — theme to package (see
  *       scripts/config.mjs; default upstream main).
  *   SHIRONES_OVERTEST_SKIP_BUILD=1 — reuse an already-built `dist/` instead of
- *       re-running sync → templates → build.
+ *       re-running templates → build.
  *   SHIRONES_PM — package manager (default `pnpm`).
  *
  * Exit code 0 only when every assertion passes. A failure leaves the throwaway
@@ -116,7 +116,6 @@ function grepUnique(dir, regex) {
 
 // ── 0. package the theme ────────────────────────────────────────────────────
 if (process.env.SHIRONES_OVERTEST_SKIP_BUILD !== "1") {
-	runNode("sync-from-upstream.mjs");
 	runNode("prepare-templates.mjs");
 	runNode("build-package.mjs");
 }
