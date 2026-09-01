@@ -61,12 +61,11 @@ await writeFile(
 			type: "module",
 			dependencies: {
 				astro: astroRange,
+				// Satisfies @astrojs/svelte's peer range (^5.3.3 || ^6.0.0) that
+				// the tree's transitive typescript 4.9.x does not; a real Astro
+				// project carries typescript anyway.
+				typescript: "^5.3.3",
 				[PACKAGE_NAME]: `file:${DIST_DIR}`,
-			},
-			// Read by pnpm 10. pnpm 11 reads pnpm-workspace.yaml instead, written
-			// just below; `init` sets up both in a real user's project.
-			pnpm: {
-				onlyBuiltDependencies: ["esbuild", "sharp"],
 			},
 		},
 		null,
@@ -95,7 +94,9 @@ await writeFile(
 );
 
 console.log("[validate] installing");
-run(packageManager, ["install", "--no-frozen-lockfile"]);
+// error-level: the install's own warnings (deprecated subdependencies, etc.)
+// are upstream-dependency-tree noise and add nothing to the validation here.
+run(packageManager, ["install", "--no-frozen-lockfile", "--loglevel=error"]);
 
 console.log("[validate] running `init`");
 run(packageManager, ["exec", "shirones", "init"]);
@@ -103,7 +104,7 @@ run(packageManager, ["exec", "shirones", "init"]);
 // `init` adds the theme's peer dependencies (svelte, the iconify collections)
 // to package.json, exactly as a real user would then install them.
 console.log("[validate] installing dependencies added by init");
-run(packageManager, ["install", "--no-frozen-lockfile"]);
+run(packageManager, ["install", "--no-frozen-lockfile", "--loglevel=error"]);
 
 // ── Assert the scaffold matches the documented layout ───────────────────────
 const expected = [
