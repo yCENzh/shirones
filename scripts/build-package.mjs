@@ -111,6 +111,37 @@ await cp(
 await chmod(join(DIST_DIR, "bin/cli.mjs"), 0o755);
 console.log("[build] bin/cli.mjs");
 
+// ── 2.5. Generate the local icon collection ────────────────────────────────
+// Upstream gitignores src/generated/local-icon-collections.ts and produces it
+// at build time via scripts/icons/generate-local-icons.mjs (its `dev`/`build`
+// scripts run it first). A package-mode user never runs that script, so the
+// file must be generated here and shipped in the tarball — otherwise
+// Icon.svelte's `@/generated/local-icon-collections` import fails with
+// UNLOADABLE_DEPENDENCY in the user's build.
+//
+// The script scans src/ for icon usage and reads the icon sets from
+// node_modules/@iconify-json/*/icons.json, so stage the pipeline's own icon
+// sets (devDependencies) into the workspace checkout before running it.
+const ICON_SETS = ["fa6-brands", "fa6-regular", "fa6-solid", "material-symbols", "simple-icons"];
+const generateIcons = join(WORKSPACE_DIR, "scripts/icons/generate-local-icons.mjs");
+if (existsSync(generateIcons)) {
+	const iconDir = join(WORKSPACE_DIR, "node_modules", "@iconify-json");
+	await mkdir(iconDir, { recursive: true });
+	for (const set of ICON_SETS) {
+		const srcJson = join(resolve("."), "node_modules", "@iconify-json", set, "icons.json");
+		if (!existsSync(srcJson)) {
+			console.error(
+				`[build] ✗ @iconify-json/${set}/icons.json is missing — ` +
+					"install the pipeline devDependencies first (pnpm install).",
+			);
+			process.exit(1);
+		}
+		await mkdir(join(iconDir, set), { recursive: true });
+		await cp(srcJson, join(iconDir, set, "icons.json"));
+	}
+	execFileSync("node", [generateIcons], { cwd: WORKSPACE_DIR, stdio: "inherit" });
+}
+
 // ── 3. Theme source (consumed by Vite, not by Node) ─────────────────────────
 await mkdir(join(DIST_DIR, "src"), { recursive: true });
 for (const dir of PACKAGE_SRC_DIRS) {
