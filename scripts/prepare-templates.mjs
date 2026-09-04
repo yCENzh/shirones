@@ -4,7 +4,9 @@
  *
  * The sync half (folded in from the former scripts/sync-from-upstream.mjs)
  * clones the theme fresh on every run: this repository stores no theme source,
- * so stale state is never a possible explanation for a bad build.
+ * so stale state is never a possible explanation for a bad build. It also runs
+ * the theme's icon generator, whose output (`src/generated/local-icon-collections.ts`)
+ * is gitignored upstream and therefore absent from any fresh clone.
  *
  * The interesting part is import rewriting. Upstream, a config module sits at
  * `src/config/musicConfig.ts` and reaches its neighbours with relative paths:
@@ -21,7 +23,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { CONTENT_ROOT, PACKAGE_NAME, UPSTREAM_REF, UPSTREAM_REPO } from "./config.mjs";
 
@@ -66,6 +68,67 @@ if (!existsSync(join(WORKSPACE_DIR, "src/integration/index.ts"))) {
 	process.exit(1);
 }
 await rm(UPSTREAM_DIR, { recursive: true, force: true });
+
+// ── 0b. Generate the local icon collections ─────────────────────────────────
+// Upstream's `dev`/`build` scripts run scripts/icons/generate-local-icons.mjs
+// before Astro: it scans `src/` for `prefix:name` icon usages and writes
+// `src/generated/local-icon-collections.ts`, which Icon.svelte imports through
+// the `@/` alias. That file is *generated* — gitignored upstream — so a fresh
+// clone (the only thing this pipeline ever sees) does not contain it, and the
+// package would ship an import that resolves to nothing. Run the theme's own
+// generator against the synced tree so the packaged `src/generated/` is real.
+//
+// The generator reads icon data from `node_modules/@iconify-json/<prefix>` *
+// under its own cwd*, so this repo's icon sets (devDependencies, versions
+// aligned with PEER_DEPENDENCIES) are linked into the workspace first. A set
+// the theme uses but this repo does not install makes the generator fail with
+// "Missing installed icon set" — add it to package.json when that happens.
+const ICON_GENERATOR = "scripts/icons/generate-local-icons.mjs";
+const iconGeneratorPath = join(WORKSPACE_DIR, ICON_GENERATOR);
+if (!existsSync(iconGeneratorPath)) {
+	console.error(
+		`[sync] ✗ ${ICON_GENERATOR} is missing upstream.\n` +
+			"  The theme no longer generates local icon collections where this\n" +
+			"  pipeline expects it to; update the generation step in prepare-templates.mjs.",
+	);
+	process.exit(1);
+}
+
+const iconSetSource = resolve("node_modules", "@iconify-json");
+const iconSetNames = existsSync(iconSetSource)
+	? (await readdir(iconSetSource)).filter((name) => !name.startsWith("."))
+	: [];
+if (iconSetNames.length === 0) {
+	console.error(
+		"[sync] ✗ no @iconify-json/* icon sets installed in this repository.\n" +
+			"  The icon generator needs them as data sources — run `pnpm install` here first.",
+	);
+	process.exit(1);
+}
+await mkdir(join(WORKSPACE_DIR, "node_modules", "@iconify-json"), {
+	recursive: true,
+});
+for (const name of iconSetNames) {
+	await symlink(
+		join(iconSetSource, name),
+		join(WORKSPACE_DIR, "node_modules", "@iconify-json", name),
+		"dir",
+	);
+}
+console.log(`[sync] linked ${iconSetNames.length} icon sets for the generator`);
+execFileSync("node", [ICON_GENERATOR], { cwd: WORKSPACE_DIR, stdio: "inherit" });
+
+const iconCollectionsPath = join(
+	WORKSPACE_DIR,
+	"src/generated/local-icon-collections.ts",
+);
+if (!existsSync(iconCollectionsPath)) {
+	console.error(
+		"[sync] ✗ the icon generator ran but src/generated/local-icon-collections.ts\n" +
+			"  was not written — check its output above.",
+	);
+		process.exit(1);
+}
 
 const SOURCE_EXTENSIONS = new Set([".ts", ".mts", ".js", ".mjs"]);
 

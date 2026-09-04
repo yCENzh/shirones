@@ -37,6 +37,19 @@ $SHIRONES_UPSTREAM_REPO`, then copies the checkout into `workspace/` and
 records the resolved commit in `workspace/.synced-sha` so the run summary can
 state exactly what was packaged.
 
+The sync then runs the theme's own `scripts/icons/generate-local-icons.mjs`
+against `workspace/`. Upstream regenerates `src/generated/local-icon-collections.ts`
+before every `astro dev`/`astro build` (it is gitignored — a build product, not
+source), and `Icon.svelte` imports it through the `@/` alias. A fresh clone
+does not contain it, so without this step the published package would ship an
+import that resolves to nothing. The generator reads icon data from
+`node_modules/@iconify-json/<prefix>` under its cwd, so the pipeline's own icon
+sets — `devDependencies` in `package.json`, versions aligned with
+`PEER_DEPENDENCIES` — are linked into the workspace's `node_modules` first. A
+set the theme starts using but the pipeline does not install fails the
+generator with *"Missing installed icon set"*; the fix is adding it to
+`package.json`.
+
 This repository stores **no theme source**. If `workspace/` exists it is
 removed first — there is no incremental mode, and stale state is never a
 possible explanation for a bad build.

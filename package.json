@@ -13,5 +13,12 @@
   },
   "dependencies": {
     "esbuild": "^0.28.2"
+  },
+  "devDependencies": {
+    "@iconify-json/fa6-brands": "^1.2.6",
+    "@iconify-json/fa6-regular": "^1.2.4",
+    "@iconify-json/fa6-solid": "^1.2.4",
+    "@iconify-json/material-symbols": "^1.2.88",
+    "@iconify-json/simple-icons": "^1.2.93"
   }
 }

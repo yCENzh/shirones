@@ -96,6 +96,18 @@ unescaping step produces hundreds of false positives.
 
 ## Building
 
+**`UNLOADABLE_DEPENDENCY … src/generated/local-icon-collections` during validation (or a user's `astro build`).**
+Upstream's `Icon.svelte` imports `@/generated/local-icon-collections`, a file
+*generated* by `scripts/icons/generate-local-icons.mjs` before every upstream
+`dev`/`build` — and gitignored there (since upstream `cad4952`), so it was
+never in a fresh clone. Until 2026-09-01 upstream also *committed* the file,
+which is why earlier packages built at all: the sync silently copied it. Once
+it became generated-only, the packaged `src/generated/` was empty and every
+build died on the unresolved import. The sync step now runs the theme's own
+generator against `workspace/` (see `docs/pipeline.md` §1). If it ever fails
+with *"Missing installed icon set `@iconify-json/<prefix>`"*, the theme started
+using a new icon collection: add it to this repo's `devDependencies`.
+
 **`ENOENT` for a file under `src/` during the user's build.**
 Something in the theme called `process.cwd()` and assumed it was the theme
 root. In package mode `cwd` is the *user's* project. See the packaging contract
