@@ -50,31 +50,21 @@ export const PACKAGE_HOMEPAGE =
 export const CONTENT_ROOT = "shirones";
 
 /**
- * Upstream directories copied into the published package (`dist/src/`).
- * `src/content` is excluded on purpose: it becomes template content instead.
+ * Top-level `src/` directories excluded from the published package. The
+ * package build now ships *every* other top-level directory it finds, so
+ * upstream adding a new `src/` directory needs no change here.
  *
- * Keep this list in sync with the theme: every new top-level `src/` directory
- * that shipped code imports must be added here. `src/user/` carries the
- * (empty) config-overlay backing module that every `src/config/*.ts` imports
- * through `config-overlay.ts`; without it the package build cannot resolve
- * `../user/user-config.ts` and dies during `astro:config:setup`.
+ * - `src/content` becomes template content (see prepare-templates.mjs), not
+ *   package source.
+ * - `src/integration` is bundled separately into the package entry points
+ *   (index.js / collections.js).
+ *
+ * `src/user/` ships by default: it carries the (empty) config-overlay backing
+ * module that every `src/config/*.ts` imports through `config-overlay.ts`;
+ * without it the package build cannot resolve `../user/user-config.ts` and
+ * dies during `astro:config:setup`.
  */
-export const PACKAGE_SRC_DIRS = [
-	"assets",
-	"components",
-	"config",
-	"constants",
-	"data",
-	"generated",
-	"i18n",
-	"layouts",
-	"pages",
-	"plugins",
-	"styles",
-	"types",
-	"user",
-	"utils",
-];
+export const PACKAGE_SRC_EXCLUDES = new Set(["content", "integration"]);
 
 /**
  * Upstream dependencies that must NOT ship with the package.

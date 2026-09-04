@@ -15,9 +15,9 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { chmod, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { extname, join, relative, resolve } from "node:path";
+import { dirname, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 import {
@@ -30,7 +30,7 @@ import {
 	PACKAGE_HOMEPAGE,
 	PACKAGE_NAME,
 	PACKAGE_REPOSITORY,
-	PACKAGE_SRC_DIRS,
+	PACKAGE_SRC_EXCLUDES,
 	PACKAGE_VERSION,
 	PEER_DEPENDENCIES,
 } from "./config.mjs";
@@ -122,37 +122,39 @@ console.log("[build] bin/cli.mjs");
 // The script scans src/ for icon usage and reads the icon sets from
 // node_modules/@iconify-json/*/icons.json, so stage the pipeline's own icon
 // sets (devDependencies) into the workspace checkout before running it.
-const ICON_SETS = ["fa6-brands", "fa6-regular", "fa6-solid", "material-symbols", "simple-icons"];
+// Every installed @iconify-json/* set is staged, not a hard-coded list: the
+// upstream generator throws a clear "[local-icons] Missing installed icon
+// set" error if it needs a set the pipeline hasn't installed yet, which is
+// exactly the signal to add it to devDependencies.
 const generateIcons = join(WORKSPACE_DIR, "scripts/icons/generate-local-icons.mjs");
 if (existsSync(generateIcons)) {
 	const iconDir = join(WORKSPACE_DIR, "node_modules", "@iconify-json");
+	const localIconDir = join(resolve("."), "node_modules", "@iconify-json");
 	await mkdir(iconDir, { recursive: true });
-	for (const set of ICON_SETS) {
-		const srcJson = join(resolve("."), "node_modules", "@iconify-json", set, "icons.json");
-		if (!existsSync(srcJson)) {
-			console.error(
-				`[build] ✗ @iconify-json/${set}/icons.json is missing — ` +
-					"install the pipeline devDependencies first (pnpm install).",
-			);
-			process.exit(1);
+	if (existsSync(localIconDir)) {
+		for (const entry of await readdir(localIconDir, { withFileTypes: true })) {
+			if (!entry.isDirectory()) continue;
+			const srcJson = join(localIconDir, entry.name, "icons.json");
+			if (!existsSync(srcJson)) continue;
+			await mkdir(join(iconDir, entry.name), { recursive: true });
+			await cp(srcJson, join(iconDir, entry.name, "icons.json"));
 		}
-		await mkdir(join(iconDir, set), { recursive: true });
-		await cp(srcJson, join(iconDir, set, "icons.json"));
 	}
 	execFileSync("node", [generateIcons], { cwd: WORKSPACE_DIR, stdio: "inherit" });
 }
 
 // ── 3. Theme source (consumed by Vite, not by Node) ─────────────────────────
+// Ship every top-level src/ directory except the excluded ones, so upstream
+// adding a directory needs no change here.
 await mkdir(join(DIST_DIR, "src"), { recursive: true });
-for (const dir of PACKAGE_SRC_DIRS) {
-	const from = join(WORKSPACE_DIR, "src", dir);
-	if (!existsSync(from)) {
-		console.log(`[build] · src/${dir} (absent upstream)`);
-		continue;
-	}
-	await cp(from, join(DIST_DIR, "src", dir), { recursive: true });
+let copied = 0;
+for (const entry of await readdir(join(WORKSPACE_DIR, "src"), { withFileTypes: true })) {
+	if (!entry.isDirectory() || PACKAGE_SRC_EXCLUDES.has(entry.name)) continue;
+	const from = join(WORKSPACE_DIR, "src", entry.name);
+	await cp(from, join(DIST_DIR, "src", entry.name), { recursive: true });
+	copied += 1;
 }
-console.log(`[build] src/ (${PACKAGE_SRC_DIRS.length} directories)`);
+console.log(`[build] src/ (${copied} directories)`);
 
 // Ambient declarations the theme's own sources rely on.
 for (const file of ["env.d.ts", "global.d.ts"]) {
@@ -233,7 +235,7 @@ const declared = new Set([
 	...Object.keys(PEER_DEPENDENCIES),
 ]);
 const missing = new Set();
-const IMPORT_RE = /(?:import|export)[\s\S]{0,200}?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
+const IMPORT_RE = /(?:import|export)[\s\S]{0,2000}?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
 
 async function scanImports(dir) {
 	for (const entry of await readdir(dir, { withFileTypes: true })) {
@@ -275,6 +277,89 @@ if (missing.size > 0) {
 	process.exit(1);
 }
 console.log(`[build] dependency scan clean (${Object.keys(dependencies).length} deps)`);
+
+// ── 5.5. Local-import integrity check ──────────────────────────────────────
+// The dependency scan above only looks at bare specifiers. This checks the
+// flip side: every relative (`./`, `../`) and theme-alias (`@/…`,
+// `@components/…`, …) import in the shipped source must resolve to a file
+// that actually ships. It is what turns upstream's "generated at build time"
+// files (gitignored, produced by an upstream script) into a loud error here,
+// instead of a user's UNLOADABLE_DEPENDENCY at their own build time.
+const LOCAL_ALIASES = [
+	["@components/", "components/"],
+	["@utils/", "utils/"],
+	["@layouts/", "layouts/"],
+	["@i18n/", "i18n/"],
+	["@constants/", "constants/"],
+	["@assets/", "assets/"],
+	// `@/` is the broadest pattern and must be tested last.
+	["@/", ""],
+];
+const LOCAL_PROBE_EXTS = [
+	".d.ts", ".ts", ".mts", ".js", ".mjs", ".astro", ".svelte",
+	".styl", ".css", ".json", ".svg", ".md", ".mdx",
+	".png", ".jpg", ".jpeg", ".webp", ".avif", ".gif",
+];
+const LOCAL_INDEX_EXTS = [".ts", ".js", ".mjs", ".astro", ".svelte"];
+
+function isFile(path) {
+	try {
+		return existsSync(path) && !statSync(path).isDirectory();
+	} catch {
+		return false;
+	}
+}
+
+function resolveLocalFile(basePath) {
+	if (isFile(basePath)) return true;
+	if (!extname(basePath)) {
+		for (const ext of LOCAL_PROBE_EXTS) if (isFile(basePath + ext)) return true;
+	}
+	for (const ext of LOCAL_INDEX_EXTS) if (isFile(join(basePath, `index${ext}`))) return true;
+	return false;
+}
+
+// Static imports (`import … from`, `export … from`) that don't resolve break
+// the user's build — hard error. Dynamic imports (`import(…)`) are resolved at
+// run time and may never execute, so a miss there is a warning, not a failure
+// (upstream's anime providers under scripts/ are the canonical case).
+const missingFiles = new Set();
+const dynamicMissing = new Set();
+async function scanLocalImports(dir) {
+	for (const entry of await readdir(dir, { withFileTypes: true })) {
+		const full = join(dir, entry.name);
+		if (entry.isDirectory()) {
+			await scanLocalImports(full);
+			continue;
+		}
+		if (![".ts", ".js", ".mjs", ".astro", ".svelte"].includes(extname(entry.name))) continue;
+		const source = await readFile(full, "utf8");
+		for (const match of source.matchAll(IMPORT_RE)) {
+			const isDynamic = match[1] === undefined;
+			let specifier = match[1] ?? match[2];
+			if (!specifier) continue;
+			const query = specifier.indexOf("?");
+			if (query !== -1) specifier = specifier.slice(0, query);
+			if (specifier.includes("${")) continue; // dynamic path — not statically resolvable
+			let target = null;
+			if (specifier.startsWith("./") || specifier.startsWith("../")) {
+				target = resolve(dirname(full), specifier);
+			} else {
+				for (const [prefix, sub] of LOCAL_ALIASES) {
+					if (!specifier.startsWith(prefix)) continue;
+					target = join(DIST_DIR, "src", sub, specifier.slice(prefix.length));
+					break;
+				}
+			}
+			if (!target) continue;
+			if (!resolveLocalFile(target)) {
+				(isDynamic ? dynamicMissing : missingFiles).add(
+					`${relative(DIST_DIR, full)} → ${specifier}`,
+				);
+			}
+		}
+	}
+}
 
 // ── 6. package.json ─────────────────────────────────────────────────────────
 // Register the CLI under both `shirones` and the published package name so
@@ -352,6 +437,26 @@ await writeFile(
 	"utf8",
 );
 console.log("[build] package.json");
+
+// Run the local-import check after package.json exists: Footer.astro imports
+// the package root package.json for its version, which only lands in dist/
+// at this point.
+await scanLocalImports(join(DIST_DIR, "src"));
+if (missingFiles.size > 0) {
+	console.error(
+		"[build] ✗ shipped source imports files that are not in the tarball:\n" +
+			[...missingFiles].sort().map((m) => `    - ${m}`).join("\n") +
+			"\n  These are usually upstream files generated at build time — generate them before copying src/.",
+	);
+	process.exit(1);
+}
+if (dynamicMissing.size > 0) {
+	console.warn(
+		"[build] ⚠ dynamically-imported files not in the tarball (runtime-only paths):\n" +
+			[...dynamicMissing].sort().map((m) => `    - ${m}`).join("\n"),
+	);
+}
+console.log("[build] local-import check clean");
 
 // ── 7. README shipped with the package ──────────────────────────────────────
 const readmeSource = join(resolve("."), "PACKAGE_README.md");

@@ -287,13 +287,13 @@ const dist = join(TEST_DIR, "dist");
 //     path the component markers prove). Visible fields must render.
 {
 	const injected = grepUnique(configDir, /__OVRMARK__\s*=\s*"([^"]+)"/);
+	// The integration loads some config modules itself on the Node side via
+	// loadConfigModule(paths, "<name>"). Derive that list from the shipped
+	// bundle instead of hard-coding it, so upstream adding/removing a
+	// Node-side config load never breaks this assertion.
+	const bundle = readFileSync(join(DIST_DIR, "index.js"), "utf8");
 	const LOADED_CONFIG = [
-		"siteConfig",
-		"sidebarConfig",
-		"expressiveCodeConfig",
-		"fontConfig",
-		"musicConfig",
-		"umamiConfig",
+		...new Set([...bundle.matchAll(/loadConfigModule\(paths,\s*"([^"]+)"/g)].map((m) => m[1])),
 	];
 	const manifest = grepUnique(join(TEST_DIR, ".shirones", "loaded"), /(CFG_[A-Za-z0-9]+)/);
 	const missing = LOADED_CONFIG.filter((m) => !manifest.has(`CFG_${m}`));

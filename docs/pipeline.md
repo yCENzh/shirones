@@ -86,8 +86,9 @@ keep full autocomplete and the field set matches the theme exactly.
 Assembles `dist/`:
 
 - Bundles `src/integration/` with esbuild into the package entry point.
-- Copies the theme's `src/` directories listed in `PACKAGE_SRC_DIRS`
-  (`src/content` is excluded — it became template content in step 1).
+- Ships every top-level `src/` directory except the `PACKAGE_SRC_EXCLUDES`
+  set (`content`, `integration`) — upstream adding a directory needs no
+  pipeline change.
 - Writes the published `package.json`: name from `PACKAGE_NAME`, version copied
   from the theme, `exports` map, `bin` for the CLI, and the dependency sets from
   `scripts/config.mjs`.
