@@ -90,6 +90,22 @@ shirones({
 See `manifest.json` inside the package for the full list of overridable
 components, layouts and config modules.
 
+## Updating and checking for drift
+
+Re-running `init` on an existing project never re-scaffolds and never
+overwrites your files:
+
+```sh
+npx shirones init            # report drift (missing files, stale files, changed fields) — changes nothing
+npx shirones init --update   # restore missing files and refresh the scaffold (config, root files, public assets)
+npx shirones init --force    # re-scaffold from the template, overwriting template files (your content is kept)
+npx shirones info            # detailed status: versions, paths, routes, config modules, drift
+```
+
+The theme only *adds* what is missing during an update; anything you wrote —
+posts, custom config values, your own `src/components/` overrides — is always
+kept.
+
 ## Importing from the package
 
 Only import from the documented entry points (`shirones`,

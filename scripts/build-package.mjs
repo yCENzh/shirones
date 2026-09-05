@@ -428,6 +428,8 @@ const pkg = {
 		"template/",
 		"types/",
 		"README.md",
+		// The inventory of routes and overridable files — README points users at it.
+		"manifest.json",
 	],
 	dependencies,
 	peerDependencies: PEER_DEPENDENCIES,
