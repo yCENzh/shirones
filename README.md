@@ -4,6 +4,20 @@ This repository packages the [Shirone](https://github.com/LyraVoid/Shirone) Astr
 theme as an npm package. **It contains no theme source**: everything is pulled
 from upstream at build time, so the theme has exactly one source of truth.
 
+## Using the package
+
+The published package is `shirones`. From an empty folder:
+
+```sh
+npx shirones init   # scaffolds config, content, assets and installs everything
+pnpm dev
+```
+
+No Astro starter or manual dependency install is needed — `init` writes a
+`package.json` and installs `astro` plus the theme's peer dependencies. See
+[PACKAGE_README.md](PACKAGE_README.md) for the full user guide (it ships with
+the package as its README).
+
 ```text
 LyraVoid/Shirone (theme + src/integration/)
         │  git clone --branch $SHIRONES_UPSTREAM_REF

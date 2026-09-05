@@ -5,28 +5,32 @@ Astro 7 and Svelte 5 — installable as a single npm package.
 
 ## Quick start
 
+No Astro starter and no manual installs — `init` works from a completely empty
+folder. It scaffolds the configuration, example content and static assets,
+writes a `package.json`, and installs `astro`, the theme and its peer
+dependencies for you.
+
 ```sh
-pnpm create astro@latest my-blog -- --template minimal --no-install --no-git
+mkdir my-blog
 cd my-blog
-pnpm add {{PACKAGE_NAME}}   # pnpm 11 ends with ERR_PNPM_IGNORED_BUILDS — expected, see below
-npx shirones init           # scaffolds the project and approves those build scripts
-pnpm install                # installs the dependencies init added, now with scripts allowed
+npx shirones init   # scaffolds everything and installs the dependencies
 pnpm dev
 ```
 
-`init` scaffolds configuration, example content and static assets. Nothing else
-is required — routes, layouts, components, styles and the markdown pipeline all
-come from the package.
+Nothing else is required — routes, layouts, components, styles and the markdown
+pipeline all come from the package. (Prefer pnpm; if you use `npm` or `yarn`,
+the same two steps work and `init` detects your package manager automatically.)
 
 ### About that `ERR_PNPM_IGNORED_BUILDS`
 
 pnpm 10+ refuses to run a dependency's install script until you approve it, and
 the theme needs two: `sharp` (Astro's image optimisation) and `esbuild` (loading
 your TypeScript config). `init` writes the approval into `pnpm-workspace.yaml`
-for you, which is why it runs through `npx` — `pnpm exec` re-checks the
-dependency state and would refuse to start before the approval exists. With npm
-or yarn the extra step is unnecessary; `npm install {{PACKAGE_NAME}} && npx
-shirones init` is enough.
+before it installs, so the plain `npx shirones init` flow never hits it. You
+only see `ERR_PNPM_IGNORED_BUILDS` if you `pnpm add {{PACKAGE_NAME}}` yourself
+*before* running `init` — in that case run `npx shirones init` (which repairs
+the approval) followed by `pnpm install`. With npm or yarn the extra step is
+unnecessary.
 
 ## Project layout
 
