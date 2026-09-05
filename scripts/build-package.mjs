@@ -132,12 +132,16 @@ if (existsSync(generateIcons)) {
 	const localIconDir = join(resolve("."), "node_modules", "@iconify-json");
 	await mkdir(iconDir, { recursive: true });
 	if (existsSync(localIconDir)) {
-		for (const entry of await readdir(localIconDir, { withFileTypes: true })) {
-			if (!entry.isDirectory()) continue;
-			const srcJson = join(localIconDir, entry.name, "icons.json");
+		// pnpm symlinks each direct dependency into node_modules/@iconify-json/<set>,
+		// so `entry` reports isDirectory() === false even though it points at a
+		// directory. Probe icons.json through the link instead of gating on
+		// isDirectory(); existsSync follows symlinks, so this works for both
+		// real directories and pnpm symlinks, and skips stray files.
+		for (const entry of await readdir(localIconDir)) {
+			const srcJson = join(localIconDir, entry, "icons.json");
 			if (!existsSync(srcJson)) continue;
-			await mkdir(join(iconDir, entry.name), { recursive: true });
-			await cp(srcJson, join(iconDir, entry.name, "icons.json"));
+			await mkdir(join(iconDir, entry), { recursive: true });
+			await cp(srcJson, join(iconDir, entry, "icons.json"));
 		}
 	}
 	execFileSync("node", [generateIcons], { cwd: WORKSPACE_DIR, stdio: "inherit" });
