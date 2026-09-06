@@ -89,10 +89,14 @@ Assembles `dist/`:
 - Ships every top-level `src/` directory except the `PACKAGE_SRC_EXCLUDES`
   set (`content`, `integration`) — upstream adding a directory needs no
   pipeline change.
-- Writes the published `package.json`: name from `PACKAGE_NAME`, version copied
-  from the theme, `exports` map, `bin` for the CLI, and the dependency sets from
-  `scripts/config.mjs`.
+- Writes the published `package.json`: name from `PACKAGE_NAME`, release version
+  from `SHIRONES_PACKAGE_VERSION`, `exports` map, `bin` for the CLI, Node.js
+  `>=22.12.0` engines, and the dependency sets from `scripts/config.mjs`.
 - Copies `PACKAGE_README.md` in as the npm landing page.
+- Ships the runtime anime providers used by the optional `fetchOnDev` snapshot
+  mode; the Bilibili provider resolves writes from the user's project root.
+- Emits `dist/build-info.json` with the upstream SHA, pipeline commit, Node and
+  pnpm versions. It is included in the npm tarball for post-release auditing.
 - Emits `dist/manifest.json`: every injected route, every overridable component
   and layout, every config module and data module, with counts. The CI summary
   prints the counts so an accidental drop (a route that stopped being
@@ -124,8 +128,9 @@ non-negotiable:
 
 The only step that proves the package actually works:
 
-1. `npm pack` the `dist/` directory into a real tarball.
-2. Create a scratch project in a temp directory and install the tarball with
+1. `npm pack` the `dist/` directory into a real tarball and assert required
+   files are in the packed file list.
+2. Create a scratch project in a temp directory and install that tarball with
    the real package manager — *not* by copying into `node_modules`, which
    skips lifecycle scripts and dependency resolution and therefore proves
    nothing.
@@ -136,7 +141,7 @@ The only step that proves the package actually works:
    only exercised by one of them.
 
 Set `SHIRONES_VALIDATE_BUILD=0` to skip the build/dev portion when iterating on
-earlier steps.
+earlier steps. The tarball install and `init` checks still run.
 
 ## Configuration
 
@@ -153,7 +158,7 @@ overridable by env var so CI can pass dispatch inputs straight through:
 | `SHIRONES_PACKAGE_AUTHOR` | `yCENzh` | Published author field |
 | `SHIRONES_PACKAGE_HOMEPAGE` | `<repository>#readme` | npm landing link |
 | `SHIRONES_VALIDATE_BUILD` | `1` | `0` skips the `astro build`/dev smoke test |
-| `SHIRONES_PM` | `pnpm` | Package manager used inside validation |
+| `SHIRONES_PM` | `pnpm` | Package manager used inside validation; the package's user-facing `init` contract remains pnpm-only |
 
 `CONTENT_ROOT` is intentionally **not** an env var: the user-facing directory is
 fixed to `shirones` so projects scaffolded with the test package keep working

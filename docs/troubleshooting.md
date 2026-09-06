@@ -29,6 +29,13 @@ or `swup`/`hast`/`mdast`/`unified` which resolve transitively — belong in
 `IGNORED_IMPORTS` in `scripts/config.mjs`, not in `EXTRA_DEPENDENCIES`. Adding a
 non-package alias to `EXTRA_DEPENDENCIES` would publish a broken dependency.
 
+**Anime live provider warning during package build.** The optional Bangumi and
+Bilibili providers are shipped under `scripts/anime/providers/` and are only
+loaded when snapshot mode has no local snapshot and `fetchOnDev` is enabled.
+The default local anime mode does not make network requests. If an older package
+still reports these providers as missing, upgrade to a release that includes the
+runtime provider files.
+
 ## Installing the package as a user
 
 **`ERR_PNPM_IGNORED_BUILDS` on `pnpm add`.**
@@ -51,6 +58,12 @@ already mentions the package, otherwise moves it into `.shirones-backup/` and
 writes the template. `clearStarterFiles()` does the same for the five starter
 files, and only treats a `.astro` file as a starter if it actually contains the
 welcome markup.
+
+**`init --force` replaced my content.** This flag intentionally re-scaffolds
+from the installed template. Before replacing `shirones/`, `public/`, or a
+project-level scaffold file, the CLI moves the previous copy into
+`.shirones-backup/`. Use plain `init` to report drift or `init --update` to add
+missing files without replacing existing content.
 
 ## Upgrading the theme
 

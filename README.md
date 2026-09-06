@@ -14,7 +14,10 @@ pnpm dev
 ```
 
 No Astro starter or manual dependency install is needed — `init` writes a
-`package.json` and installs `astro` plus the theme's peer dependencies. See
+`package.json` and installs `astro` plus the theme's peer dependencies. The
+published package requires Node.js 22.12 or newer and `init` sets up pnpm
+behavior only; npm/yarn users must migrate the generated project themselves.
+See
 [PACKAGE_README.md](PACKAGE_README.md) for the full user guide (it ships with
 the package as its README).
 
@@ -26,7 +29,7 @@ LyraVoid/Shirone (theme + src/integration/)
         │
         ├─ prepare-templates.mjs  → dist/template/   (what `init` copies)
         ├─ build-package.mjs      → dist/ + manifest.json (the npm tarball)
-        └─ validate.mjs           → real install + init + astro build
+        └─ validate.mjs           → npm pack + real install + init + astro build
         │
         ▼
    npm publish  (GitHub Actions, provenance enabled)
@@ -38,8 +41,9 @@ LyraVoid/Shirone (theme + src/integration/)
 | --- | --- |
 | `pnpm version:next` | Decide the version to publish (patch bump, or an explicit one) |
 | `pnpm templates` | Clone the upstream theme into `workspace/`, then build `dist/template/`, rewriting imports for the user layout |
-| `pnpm build` | Bundle the integration, copy theme source, write `package.json` and the route/override `manifest.json` |
-| `pnpm validate` | Install into a scratch project, run `init`, then `astro build` |
+| `pnpm build` | Bundle the integration, copy theme source/providers, write `package.json`, provenance and the route/override `manifest.json` |
+| `pnpm validate` | Pack the real npm tarball, install it in a scratch project, run `init`, then `astro build` and dev smoke tests |
+| `pnpm override-test` | Install the packed tarball and exercise config/data/component/layout overrides |
 
 Run the whole thing with `pnpm all`.
 

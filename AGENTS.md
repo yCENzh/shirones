@@ -23,7 +23,7 @@
 | Upstream sync + import rewriting for the user-facing template | `scripts/prepare-templates.mjs` |
 | Bundling + `package.json` + route/override manifest | `scripts/build-package.mjs` |
 | End-to-end install test | `scripts/validate.mjs` |
-| CI | `.github/workflows/publish.yml` |
+| Build & publish | `.github/workflows/publish.yml` |
 
 ## Documentation
 
@@ -41,13 +41,14 @@ touching the pipeline:
 The theme-side counterpart is `docs/packaging-contract.md` upstream. When a rule
 here constrains how theme code must be written, it belongs there too.
 
-## CI
+## Build & publish
 
-Manual dispatch only — the push trigger was removed on purpose so that editing
-this repository never publishes. `pnpm/setup@v2` (not `pnpm/action-setup`)
-installs pnpm plus Node and runs `pnpm install` in one step; the publish step
-installs npm globally (`pnpm add -g npm`) and writes the auth `.npmrc` from
-`NPM_TOKEN`.
+Publishing remains manual-only — `.github/workflows/publish.yml` has no push or
+pull-request trigger, so editing this repository never publishes. The same
+manual workflow performs the build, packed-package validation and override test
+before its final upload/publish parallel group. It uses `pnpm/setup@v2` (not
+`pnpm/action-setup`) with Node 22; the publish step installs npm globally
+(`pnpm add -g npm`) and writes the auth `.npmrc` from `NPM_TOKEN`.
 
 The published version is **not** the theme's version: `resolve-version.mjs`
 patch-bumps the latest release on npm, or takes the workflow's version input,
@@ -68,6 +69,7 @@ pnpm install
 pnpm templates
 pnpm build
 SHIRONES_VALIDATE_BUILD=0 pnpm validate   # full build needs ~4 GB RAM
+SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test
 ```
 
 ## Switching the upstream repo / branch / package name

@@ -32,7 +32,7 @@ exist so the pipeline is not hard-wired to one branch or one package name.
 | **Upstream branch/tag of the theme to package** | `main` | Cutting a release from a different theme branch, or packaging a tag (`v1.2.0`) for a reproducible build. |
 | **Clone URL of the theme repository** | `https://github.com/LyraVoid/Shirone.git` | Packaging a fork, or a rename of the theme repository. Must be a public clone URL — the job checks out with no credentials. |
 | **npm package name to publish** | `shirones` | Publishing under a scoped scratch name (for example `@you/shirones-experiment`) while experimenting. The switch away from the `shirones-test` trial package was exactly this field. |
-| **Build and validate, but do not publish** | unchecked (publish) | Rehearsal. Runs the entire pipeline including a real `astro build` in a scratch project, then stops before `npm publish`. Use it after changing anything in `scripts/`, or to check a theme branch is packageable before merging it. The tarball is still attached to the run as an artifact for 14 days. |
+| **Build and validate, but do not publish** | unchecked (publish) | Rehearsal. Runs `npm pack`, installs the real tarball, runs `init`, `astro build`, the dev smoke test and the override suite, then stops before `npm publish`. Use it after changing anything in `scripts/`, or to check a theme branch is packageable before merging it. The tarball is still attached to the run as an artifact for 14 days. |
 
 ## Where the version comes from
 
@@ -70,17 +70,17 @@ dispatch form — no commit required, and the `CONTENT_ROOT` stays `shirones`
 regardless, so projects scaffolded under a scratch name keep working after the
 switch back.
 
-With no published versions under `shirones` yet, the first run left at default
-resolves to `0.0.0` (see "Where the version comes from"). Set the version input
-explicitly if the first release should instead be a milestone (`1.0.0`), or if
-you want to start the package at a specific number.
+The first production releases are already published; future blank version inputs
+continue from the highest stable version currently visible on npm. Set the
+version input explicitly for a minor, major or prerelease release.
 
 The user-facing directory is **not** renamed: `CONTENT_ROOT` stays `shirones`
 in both packages, so a blog scaffolded with the test package keeps working
 after switching.
 
-Before the first production publish, confirm the npm token in `NPM_TOKEN` has
-publish rights on the `shirones` name.
+Before a production publish, confirm the npm token in `NPM_TOKEN` has publish
+rights on the `shirones` name. The package itself requires Node.js 22.12 or
+newer, and the workflow validates with Node 22.
 
 ## What the pipeline needs from the environment
 
@@ -97,7 +97,7 @@ memory-hungry (`astro build` in validation needs several GB):
 
 ```bash
 pnpm install --no-lockfile
-pnpm all                       # sync → templates → build → manifest → validate
+pnpm all                       # sync → templates → build → packed validate → overrides
 pnpm version:next              # what the next version would be, without publishing
 ```
 
