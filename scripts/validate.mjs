@@ -15,6 +15,7 @@
  */
 
 import { execFileSync, spawn } from "node:child_process";
+import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -251,6 +252,10 @@ async function checkDevServer() {
 	const port = 4331;
 	console.log("[validate] booting the dev server");
 
+	// pnpm is a launcher, so killing only its PID can leave Astro/Vite alive.
+	// Start a process group and terminate the whole group before removing the
+	// throwaway project. Otherwise Vite keeps watching the deleted directory
+	// and floods the workflow with full-reload errors.
 	const child = spawn(packageManager, ["exec", "astro", "dev", "--host", "127.0.0.1", "--port", String(port)], {
 		cwd: TEST_DIR,
 		env: {
@@ -258,6 +263,7 @@ async function checkDevServer() {
 			NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --max-old-space-size=4096`.trim(),
 		},
 		stdio: ["ignore", "pipe", "pipe"],
+		detached: process.platform !== "win32",
 	});
 
 	let output = "";
@@ -270,8 +276,31 @@ async function checkDevServer() {
 	child.stdout.on("data", collect);
 	child.stderr.on("data", collect);
 
-	const stop = () => {
-		if (!child.killed) child.kill("SIGTERM");
+	const running = () => child.exitCode === null && child.signalCode === null;
+	const waitForExit = async (timeoutMs) => {
+		if (!running()) return;
+		await Promise.race([
+			once(child, "exit"),
+			new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+		]);
+	};
+	const signalTree = (signal) => {
+		if (!running()) return;
+		try {
+			if (process.platform === "win32") child.kill(signal);
+			else process.kill(-child.pid, signal);
+		} catch (error) {
+			if (error.code !== "ESRCH") throw error;
+		}
+	};
+	const stop = async () => {
+		if (!running()) return;
+		signalTree("SIGTERM");
+		await waitForExit(5_000);
+		if (running()) {
+			signalTree("SIGKILL");
+			await waitForExit(2_000);
+		}
 	};
 
 	try {
@@ -349,6 +378,6 @@ async function checkDevServer() {
 		}
 		console.log(`[validate] ✓ dev server rendered ${routes.length} routes`);
 	} finally {
-		stop();
+		await stop();
 	}
 }
