@@ -141,7 +141,12 @@ The only step that proves the package actually works:
    only exercised by one of them.
 
 Set `SHIRONES_VALIDATE_BUILD=0` to skip the build/dev portion when iterating on
-earlier steps. The tarball install and `init` checks still run.
+earlier steps. The tarball install and lifecycle checks still run. The
+Build & Publish workflow uses this mode deliberately: `override-test` already
+performs the full baseline and override Astro builds, so running another full
+build and dev server in `validate` would duplicate the expensive part. Run
+`pnpm validate` without this variable when the dev-server smoke test itself is
+the thing being investigated.
 
 ## Configuration
 

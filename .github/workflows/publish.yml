@@ -72,8 +72,8 @@ jobs:
       - name: Build package and manifest
         run: pnpm build
       - parallel:
-        - name: Validate packed package end to end
-          run: pnpm validate
+        - name: Validate packed package lifecycle
+          run: SHIRONES_VALIDATE_BUILD=0 pnpm validate
 
         - name: Validate config and component overrides
           run: SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test

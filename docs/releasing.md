@@ -16,8 +16,11 @@ Whenever the theme gets updates, the whole release is:
 That is it — no version to bump, nothing to push here. The pipeline clones the
 theme itself and picks the next version itself.
 
-Takes 6–8 minutes. The run's summary page reports the published version, the
-upstream commit it was built from, and the route/component counts.
+The runtime is dominated by the override suite's Astro builds; it is not a
+fixed-duration check. The run's summary page reports the published version, the
+upstream commit it was built from, and the route/component counts. The publish
+workflow keeps `validate` focused on the packed tarball lifecycle and lets the
+override suite provide the full Astro builds.
 
 ## The six inputs, and whether you should care
 
@@ -32,7 +35,7 @@ exist so the pipeline is not hard-wired to one branch or one package name.
 | **Upstream branch/tag of the theme to package** | `main` | Cutting a release from a different theme branch, or packaging a tag (`v1.2.0`) for a reproducible build. |
 | **Clone URL of the theme repository** | `https://github.com/LyraVoid/Shirone.git` | Packaging a fork, or a rename of the theme repository. Must be a public clone URL — the job checks out with no credentials. |
 | **npm package name to publish** | `shirones` | Publishing under a scoped scratch name (for example `@you/shirones-experiment`) while experimenting. The switch away from the `shirones-test` trial package was exactly this field. |
-| **Build and validate, but do not publish** | unchecked (publish) | Rehearsal. Runs `npm pack`, installs the real tarball, runs `init`, `astro build`, the dev smoke test and the override suite, then stops before `npm publish`. Use it after changing anything in `scripts/`, or to check a theme branch is packageable before merging it. The tarball is still attached to the run as an artifact for 14 days. |
+| **Build and validate, but do not publish** | unchecked (publish) | Rehearsal. Runs `npm pack`, installs the real tarball, checks `init`, `init --force`, `info` and the override suite's full Astro builds, then stops before `npm publish`. The normal workflow skips the separate dev-server smoke test to avoid duplicating the heavy build; run `pnpm validate` locally without `SHIRONES_VALIDATE_BUILD=0` when that check is specifically needed. The tarball is still attached to the run as an artifact for 14 days. |
 
 ## Where the version comes from
 
