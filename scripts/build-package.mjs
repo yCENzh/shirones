@@ -65,7 +65,7 @@ const shared = {
 	bundle: true,
 	format: "esm",
 	platform: "node",
-	target: "node20",
+	target: "node22",
 	packages: "external",
 	logLevel: "info",
 	sourcemap: false,
@@ -159,6 +159,24 @@ for (const entry of await readdir(join(WORKSPACE_DIR, "src"), { withFileTypes: t
 	copied += 1;
 }
 console.log(`[build] src/ (${copied} directories)`);
+
+// ── 3.5. Runtime anime providers ────────────────────────────────────────────
+// `src/utils/anime-data.ts` dynamically imports these modules when a user opts
+// into snapshot mode with `fetchOnDev`. Dynamic imports are intentionally
+// warnings in the generic local-import scan, but these providers are a real
+// documented package feature, so ship them explicitly.
+const animeProvidersDir = join(WORKSPACE_DIR, "scripts/anime/providers");
+if (existsSync(animeProvidersDir)) {
+	const targetDir = join(DIST_DIR, "scripts/anime/providers");
+	await mkdir(targetDir, { recursive: true });
+	let providerCount = 0;
+	for (const entry of await readdir(animeProvidersDir, { withFileTypes: true })) {
+		if (!entry.isFile() || extname(entry.name) !== ".mjs") continue;
+		await cp(join(animeProvidersDir, entry.name), join(targetDir, entry.name));
+		providerCount += 1;
+	}
+	if (providerCount > 0) console.log(`[build] anime providers (${providerCount} files)`);
+}
 
 // Ambient declarations the theme's own sources rely on.
 for (const file of ["env.d.ts", "global.d.ts"]) {
@@ -325,8 +343,9 @@ function resolveLocalFile(basePath) {
 
 // Static imports (`import … from`, `export … from`) that don't resolve break
 // the user's build — hard error. Dynamic imports (`import(…)`) are resolved at
-// run time and may never execute, so a miss there is a warning, not a failure
-// (upstream's anime providers under scripts/ are the canonical case).
+// run time and may never execute, so a miss there is a warning rather than a
+// failure. Documented runtime features must still be copied explicitly above;
+// the warning is for genuinely optional or upstream-only paths.
 const missingFiles = new Set();
 const dynamicMissing = new Set();
 async function scanLocalImports(dir) {
@@ -430,10 +449,12 @@ const pkg = {
 		"README.md",
 		// The inventory of routes and overridable files — README points users at it.
 		"manifest.json",
+		"build-info.json",
+		"scripts/anime/providers/",
 	],
 	dependencies,
 	peerDependencies: PEER_DEPENDENCIES,
-	engines: { node: ">=20.0.0" },
+	engines: { node: ">=22.12.0" },
 	publishConfig: { access: "public" },
 };
 
@@ -479,15 +500,33 @@ if (existsSync(readmeSource)) {
 const sha = existsSync(join(WORKSPACE_DIR, ".synced-sha"))
 	? (await readFile(join(WORKSPACE_DIR, ".synced-sha"), "utf8")).trim()
 	: "unknown";
+const syncedRef = existsSync(join(WORKSPACE_DIR, ".synced-ref"))
+	? (await readFile(join(WORKSPACE_DIR, ".synced-ref"), "utf8")).trim()
+	: "unknown";
+let pipelineCommit = "unknown";
+try {
+	pipelineCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+} catch {
+	// Local builds from source archives do not have to be Git checkouts.
+}
+let pnpmBuildVersion = "unknown";
+try {
+	pnpmBuildVersion = execFileSync("pnpm", ["--version"], { encoding: "utf8" }).trim();
+} catch {
+	// pnpm is optional for syntax-only/local inspection runs.
+}
 await writeFile(
 	join(DIST_DIR, "build-info.json"),
 	`${JSON.stringify(
 		{
 			package: PACKAGE_NAME,
 			version: PACKAGE_VERSION ?? "0.0.0",
+			upstreamRef: syncedRef,
 			upstreamSha: sha,
+			pipelineCommit,
 			builtAt: new Date().toISOString(),
 			node: process.version,
+			pnpm: pnpmBuildVersion,
 		},
 		null,
 		2,
