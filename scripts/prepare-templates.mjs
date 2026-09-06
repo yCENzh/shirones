@@ -24,6 +24,13 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { CONTENT_ROOT, PACKAGE_NAME, UPSTREAM_REF, UPSTREAM_REPO } from "./config.mjs";
+import {
+	CONFIG_REWRITES,
+	CONTENT_REWRITES,
+	DATA_REWRITES,
+	SOURCE_EXTENSIONS,
+	applyRewrites,
+} from "./template-rewrites.mjs";
 
 const WORKSPACE_DIR = resolve("workspace");
 const TEMPLATE_DIR = resolve("dist/template");
@@ -66,44 +73,6 @@ if (!existsSync(join(WORKSPACE_DIR, "src/integration/index.ts"))) {
 	process.exit(1);
 }
 await rm(UPSTREAM_DIR, { recursive: true, force: true });
-
-const SOURCE_EXTENSIONS = new Set([".ts", ".mts", ".js", ".mjs"]);
-
-/**
- * Rewrite rules applied to files moved from `src/config/` into
- * `<CONTENT_ROOT>/config/`.
- */
-const CONFIG_REWRITES = [
-	// The data modules travel with the config, one level down.
-	[/(["'])\.\.\/data\//g, "$1./data/"],
-	// Paths a config file hands to the theme are resolved against the *user's*
-	// project root, where `src/data/` does not exist. The anime snapshot cache
-	// is the one such default; keep it beside the data modules it belongs to.
-	// Not delimiter-anchored on purpose: the same path appears in the doc
-	// comment above the option, and a comment that contradicts the value is
-	// worse than no comment.
-	[/src\/data\/anime-snapshots/g, `${CONTENT_ROOT}/config/data/anime-snapshots`],
-	// Everything else that escapes upward now lives inside the package.
-	[/(["'])\.\.\/(types|utils|constants|i18n|generated|components|layouts|styles|assets|plugins)\//g, "$1@/$2/"],
-];
-
-/**
- * Rewrite rules applied to files moved from `src/data/` into
- * `<CONTENT_ROOT>/config/data/`.
- */
-const DATA_REWRITES = [
-	[/(["'])\.\.\/(types|utils|constants|i18n|generated|components|layouts|styles|assets|plugins)\//g, "$1@/$2/"],
-	// `../config/x` from a data module resolves to a sibling of its new parent.
-	[/(["'])\.\.\/config\//g, "$1../"],
-];
-
-function applyRewrites(source, rules) {
-	let output = source;
-	for (const [pattern, replacement] of rules) {
-		output = output.replace(pattern, replacement);
-	}
-	return output;
-}
 
 /**
  * Copy a directory, rewriting imports in source files and passing everything
@@ -214,24 +183,10 @@ await assertNoEscapedImports(join(TEMPLATE_DIR, CONTENT_ROOT, "config"));
 
 // ── 3. Content ──────────────────────────────────────────────────────────────
 /**
- * Rewrites applied to the example articles.
- *
- * `@[code-tree](...)` scans a real directory of the project it renders in, so
- * a demo pointing at the theme's own `/src/config` silently renders nothing in
- * a user's project. The same files are scaffolded to `<CONTENT_ROOT>/config`,
- * which keeps the demo (and its `entry="siteConfig.ts"`) working there.
- *
- * `remark-includes` resolves `@include:` paths against the project root
- * (`process.cwd()` in both modes — Astro renders content with an unset vfile
- * path here), and the theme's `src/content/snippets/` is scaffolded to
- * `<CONTENT_ROOT>/content/snippets/`, so the includes demo needs the same
- * treatment or it silently stays literal.
+ * `@[code-tree](...)` and `remark-includes` need these content paths rewritten
+ * for the user project layout; the rules live in `template-rewrites.mjs` so
+ * they can be tested without cloning an upstream repository.
  */
-const CONTENT_REWRITES = [
-	[/\]\(\/src\/config\)/g, `](/${CONTENT_ROOT}/config)`],
-	[/src\/content\/snippets\//g, `${CONTENT_ROOT}/content/snippets/`],
-];
-
 const CONTENT_TEXT_EXTENSIONS = new Set([".md", ".mdx"]);
 
 const contentSource = join(WORKSPACE_DIR, "src/content");

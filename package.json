@@ -7,11 +7,12 @@
   "scripts": {
     "version:next": "node scripts/resolve-version.mjs",
     "test:version": "node --test scripts/semver.test.mjs",
+    "test:templates": "node --test scripts/template-rewrites.test.mjs",
     "templates": "node scripts/prepare-templates.mjs",
     "build": "node scripts/build-package.mjs",
     "validate": "node scripts/validate.mjs",
     "override-test": "node scripts/override-test.mjs",
-    "all": "pnpm templates && pnpm build && pnpm validate && SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test"
+    "all": "pnpm test:version && pnpm test:templates && pnpm templates && pnpm build && pnpm validate && SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test"
   },
   "dependencies": {
     "esbuild": "^0.28.2"

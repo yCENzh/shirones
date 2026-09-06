@@ -40,6 +40,8 @@ LyraVoid/Shirone (theme + src/integration/)
 | Script | Purpose |
 | --- | --- |
 | `pnpm version:next` | Decide the version to publish (patch bump, or an explicit one) |
+| `pnpm test:version` | Check strict SemVer parsing rules |
+| `pnpm test:templates` | Check config, data and Markdown path-rewrite fixtures |
 | `pnpm templates` | Clone the upstream theme into `workspace/`, then build `dist/template/`, rewriting imports for the user layout |
 | `pnpm build` | Bundle the integration, copy theme source/providers, write `package.json`, provenance and the route/override `manifest.json` |
 | `pnpm validate` | Pack the real npm tarball, install it in a scratch project, run `init`, then `astro build` and dev smoke tests |

@@ -64,6 +64,8 @@ jobs:
 
       - name: Validate version parser
         run: pnpm test:version
+      - name: Validate template rewrite rules
+        run: pnpm test:templates
       - name: Resolve version
         id: version
         run: node scripts/resolve-version.mjs
