@@ -21,9 +21,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { PACKAGE_NAME } from "./config.mjs";
-
-const SEMVER =
-	/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z-.]+))?(?:\+([0-9A-Za-z-.]+))?$/;
+import { parseSemver } from "./semver.mjs";
 
 /** Every version already on npm, newest first. Empty if unpublished. */
 function publishedVersions() {
@@ -49,9 +47,9 @@ function publishedVersions() {
  */
 function latestRelease(versions) {
 	const releases = versions
-		.map((version) => SEMVER.exec(version))
-		.filter((match) => match && !match[4])
-		.map((match) => [Number(match[1]), Number(match[2]), Number(match[3])]);
+		.map(parseSemver)
+		.filter((version) => version && !version.prerelease)
+		.map((version) => [version.major, version.minor, version.patch]);
 	if (releases.length === 0) return null;
 	releases.sort((a, b) => b[0] - a[0] || b[1] - a[1] || b[2] - a[2]);
 	return releases[0];
@@ -64,7 +62,7 @@ let version;
 let reason;
 
 if (requested) {
-	if (!SEMVER.test(requested)) {
+	if (!parseSemver(requested)) {
 		console.error(
 			`[version] "${requested}" is not a valid semver version (expected e.g. 1.2.3 or 1.2.3-rc.1)`,
 		);
