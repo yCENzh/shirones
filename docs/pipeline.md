@@ -1,8 +1,10 @@
 # Pipeline
 
-Four scripts turn a checkout of the theme into a publishable tarball. They run
-in order and each one only reads what the previous one produced, so any step
-can be re-run on its own while debugging.
+Two side-effect-free unit checks run before the packaging pipeline:
+`pnpm test:version` covers strict release versions, and `pnpm test:templates`
+covers the path-rewrite fixtures. The packaging steps then turn a checkout of
+the theme into a publishable tarball. Each step only reads what the previous
+packaging step produced, so it can be re-run on its own while debugging.
 
 ```text
 LyraVoid/Shirone @ $SHIRONES_UPSTREAM_REF
@@ -13,7 +15,9 @@ LyraVoid/Shirone @ $SHIRONES_UPSTREAM_REF
         │
    2. build        → dist/ + manifest.json         the tarball: integration + src/ + package.json
         │
-   3. validate     → /tmp scratch project  real install + init + astro build + dev smoke
+   3. validate     → /tmp scratch project  real tarball + init/force/info lifecycle
+        │
+   4. override-test → /tmp scratch project baseline + override Astro builds
         │
         ▼
    npm publish --provenance
@@ -98,9 +102,11 @@ Assembles `dist/`:
 - Emits `dist/build-info.json` with the upstream SHA, pipeline commit, Node and
   pnpm versions. It is included in the npm tarball for post-release auditing.
 - Emits `dist/manifest.json`: every injected route, every overridable component
-  and layout, every config module and data module, with counts. The CI summary
-  prints the counts so an accidental drop (a route that stopped being
-  discovered) is visible in the run without diffing tarballs.
+  and layout, every config module and data module, with counts. The component
+  and layout lists are an inventory; they are not a claim that every file is
+  reachable from the default routes. The CI summary prints the counts so an
+  accidental drop (a route that stopped being discovered) is visible in the run
+  without diffing tarballs.
 
 The version written into `package.json` comes from `SHIRONES_PACKAGE_VERSION`,
 falling back to `0.0.0` when the resolver has not run (a local build stamps a

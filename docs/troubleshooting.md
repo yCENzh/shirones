@@ -48,8 +48,11 @@ Same cause: with unapproved build scripts pending, `pnpm exec` / `pnpm <cli>`
 will not run. Use `npx shirones init` (or `./node_modules/.bin/shirones init`).
 
 **pnpm refuses to install the version that was just published.**
-pnpm 11 defaults `minimumReleaseAge` to a non-zero value and will not install a
-package published minutes ago. Add `--config.minimumReleaseAge=0`.
+Recent pnpm releases can enforce a non-zero `minimumReleaseAge` and refuse a
+package published minutes ago. First check whether that policy is intentional
+and wait for the required age when it is. For a one-off local test only, pass
+`--config.minimumReleaseAge=0`; do not silently commit that override to a user
+project.
 
 **The theme does not apply at all — a stock Astro welcome page renders.**
 `init` used to leave an existing `astro.config.mjs` untouched. Fixed in 0.0.8:
@@ -130,6 +133,15 @@ relative paths whose importer is inside the package.
 dependency, leaving only `astro*` external, precisely because of this.
 
 ## Validation
+
+**Validation prints repeated `An error happened during full reload` messages after it already reports success.**
+This usually means the `pnpm exec astro dev` launcher exited while its Astro/Vite
+child process kept watching the scratch directory. Removing `.validate/` then
+makes the surviving watcher reload files that no longer exist. The validation
+script now starts a process group, terminates the whole group, waits for exit,
+and only then removes the scratch project. Check the first error before the
+reload flood: it is the useful one; the later missing-file errors are usually
+cleanup fallout.
 
 **`astro dev` starts in CI but every request fails.**
 Two separate traps: `astro dev` binds only to localhost unless given

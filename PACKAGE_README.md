@@ -90,8 +90,10 @@ shirones({
 })
 ```
 
-See `manifest.json` inside the package for the full list of overridable
-components, layouts and config modules.
+See `manifest.json` inside the package for the inventory of overridable
+components, layouts and config modules. It is an inventory, not a promise that
+every component is loaded by the default routes: some are feature-gated,
+library-only or integration-only.
 
 ## Updating and checking for drift
 
