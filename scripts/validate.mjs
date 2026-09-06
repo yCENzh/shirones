@@ -10,8 +10,8 @@
  *
  * The packed tarball is deliberate: it verifies the npm `files` whitelist and
  * the exact artifact users install, not merely the source `dist/` directory.
- * Set `SHIRONES_VALIDATE_BUILD=0` to stop after `init` (useful on machines
- * without enough memory for a full Astro build).
+ * Set `SHIRONES_VALIDATE_BUILD=0` to skip the Astro production/dev build while
+ * keeping the tarball, scaffold, force-backup and `info` checks.
  */
 
 import { execFileSync, spawn } from "node:child_process";
@@ -236,7 +236,11 @@ console.log(`[validate] ✓ ${staticRoutes.length} static routes emitted`);
 if (!existsSync(join(outDir, "index.html"))) fail("no index.html produced");
 
 // ── Prove the dev server boots and renders pages ────────────────────────────
-await checkDevServer();
+try {
+	await checkDevServer();
+} catch (error) {
+	fail(error instanceof Error ? error.message : String(error));
+}
 
 await rm(TEST_DIR, { recursive: true, force: true });
 console.log("[validate] ✓ package validated");
@@ -302,29 +306,40 @@ async function checkDevServer() {
 			await waitForExit(2_000);
 		}
 	};
+	const devFail = (message) => {
+		throw new Error(message);
+	};
 
 	try {
 		const deadline = Date.now() + 120_000;
 		while (!/ready in/i.test(output)) {
-			if (child.exitCode !== null) fail("the dev server exited before it was ready");
-			if (Date.now() > deadline) fail("the dev server did not become ready within 120s");
+			if (!running()) devFail("the dev server exited before it was ready");
+			if (Date.now() > deadline) devFail("the dev server did not become ready within 120s");
 			await new Promise((r) => setTimeout(r, 500));
 		}
 
 		// `ready in` is printed a beat before the socket accepts connections.
+		// Use one total deadline, rather than resetting a long timeout for every
+		// retry. A broken dev server must fail the check, not hold the release.
 		const get = async (route) => {
+			const deadline = Date.now() + 30_000;
 			let lastError;
-			for (let attempt = 0; attempt < 20; attempt += 1) {
+			while (Date.now() < deadline) {
+				const remaining = deadline - Date.now();
 				try {
 					return await fetch(`http://127.0.0.1:${port}${route}`, {
-						signal: AbortSignal.timeout(120_000),
+						signal: AbortSignal.timeout(Math.min(5_000, remaining)),
 					});
 				} catch (error) {
 					lastError = error;
-					await new Promise((r) => setTimeout(r, 1000));
+					await new Promise((r) =>
+						setTimeout(r, Math.min(1_000, Math.max(0, deadline - Date.now()))),
+					);
 				}
 			}
-			throw lastError;
+			throw new Error(
+				`dev server did not respond for ${route} within 30s: ${lastError?.message ?? "unknown error"}`,
+			);
 		};
 
 		// Pick dev-server routes from what actually exists: hard-coding page
@@ -365,15 +380,15 @@ async function checkDevServer() {
 			);
 		}
 
-		if (routes.length === 0) fail("no dev-server routes could be selected");
+		if (routes.length === 0) devFail("no dev-server routes could be selected");
 		for (const route of routes) {
 			const response = await get(route);
 			const body = await response.text();
-			if (!response.ok) fail(`dev server returned ${response.status} for ${route}`);
+			if (!response.ok) devFail(`dev server returned ${response.status} for ${route}`);
 			if (body.includes("astro-error") || body.includes("Internal server error")) {
-				fail(`dev server rendered an error page for ${route}`);
+				devFail(`dev server rendered an error page for ${route}`);
 			}
-			if (body.length < 500) fail(`dev server returned a suspiciously small ${route}`);
+			if (body.length < 500) devFail(`dev server returned a suspiciously small ${route}`);
 			console.log(`  ${route} → ${response.status} (${body.length} bytes)`);
 		}
 		console.log(`[validate] ✓ dev server rendered ${routes.length} routes`);
