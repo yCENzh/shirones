@@ -82,8 +82,8 @@ in both packages, so a blog scaffolded with the test package keeps working
 after switching.
 
 Before a production publish, confirm the npm token in `NPM_TOKEN` has publish
-rights on the `shirones` name. The package itself requires Node.js 22.12 or
-newer, and the workflow validates with Node 22.
+rights on the `shirones` name. The package itself requires Node.js `>=22.12.0`; the workflow runs on the
+current Node LTS, which is above that floor.
 
 ## What the pipeline needs from the environment
 

@@ -47,7 +47,8 @@ Publishing remains manual-only — `.github/workflows/publish.yml` has no push o
 pull-request trigger, so editing this repository never publishes. The same
 manual workflow performs the build, packed-package validation and override test
 before its final upload/publish parallel group. It uses `pnpm/setup@v2` (not
-`pnpm/action-setup`) with Node 22; the publish step installs npm globally
+`pnpm/action-setup`) with the current Node LTS; the package still requires
+Node `>=22.12.0`. The publish step installs npm globally
 (`pnpm add -g npm`) and writes the auth `.npmrc` from `NPM_TOKEN`.
 
 The published version is **not** the theme's version: `resolve-version.mjs`
