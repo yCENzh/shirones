@@ -323,7 +323,8 @@ if (existsSync(vsCodeExt)) {
 
 // .gitignore — the theme's own, retargeted at a user project: the anime
 // snapshot cache lives under `shirones/config/data/` there, and the
-// integration's `.shirones/` scratch directory needs ignoring too.
+// integration's `.shirones/` scratch directory and `.shirones-backup/` recovery
+// directory need ignoring too.
 const themeGitignore = existsSync(join(WORKSPACE_DIR, ".gitignore"))
 	? await readFile(join(WORKSPACE_DIR, ".gitignore"), "utf8")
 	: "node_modules/\ndist/\n.astro/\n";
@@ -332,7 +333,7 @@ const userGitignore = `${themeGitignore
 		"src/data/anime-snapshots/*.json",
 		`${CONTENT_ROOT}/config/data/anime-snapshots/*.json`,
 	)
-	.trimEnd()}\n\n# shirones integration cache\n.shirones/\n`;
+	.trimEnd()}\n\n# shirones integration cache\n.shirones/\n.shirones-backup/\n`;
 // Ship as `_gitignore` for the same reason `.npmrc` becomes `_npmrc`: the real
 // `.gitignore` never survives packaging, so `init` renames this one back.
 await writeFile(join(TEMPLATE_DIR, "_gitignore"), userGitignore, "utf8");
@@ -385,11 +386,14 @@ pnpm preview   # preview the production build locally
 ## Updating the theme
 
 \`\`\`bash
-npx ${PACKAGE_NAME} init --force
+npx ${PACKAGE_NAME} init            # report drift only
+npx ${PACKAGE_NAME} init --update   # add missing files without replacement
+npx ${PACKAGE_NAME} init --force    # replace the template after backing up the old copy
 \`\`\`
 
-See the package documentation for the full configuration reference and the
-component-override rules.
+\`--force\` moves the previous \`shirones/\`, \`public/\` and project scaffold files
+to \`.shirones-backup/\` before copying the installed template. See the package
+documentation for the full configuration reference and component-override rules.
 `,
 	"utf8",
 );

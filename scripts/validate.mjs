@@ -3,10 +3,13 @@
  *
  * Creates a throwaway Astro project exactly the way a user would:
  *
- *     pnpm add <package>
+ *     npm pack ./dist
+ *     pnpm add <package-tarball>
  *     pnpm <package> init
  *     pnpm build
  *
+ * The packed tarball is deliberate: it verifies the npm `files` whitelist and
+ * the exact artifact users install, not merely the source `dist/` directory.
  * Set `SHIRONES_VALIDATE_BUILD=0` to stop after `init` (useful on machines
  * without enough memory for a full Astro build).
  */
@@ -47,9 +50,39 @@ console.log("[validate] preparing throwaway project");
 await rm(TEST_DIR, { recursive: true, force: true });
 await mkdir(TEST_DIR, { recursive: true });
 
-const astroRange =
-	JSON.parse(await readFile(join(DIST_DIR, "package.json"), "utf8"))
-		.peerDependencies?.astro ?? "^7.0.0";
+const distPackage = JSON.parse(await readFile(join(DIST_DIR, "package.json"), "utf8"));
+const astroRange = distPackage.peerDependencies?.astro ?? "^7.0.0";
+
+// Validate the real npm artifact, not a directory dependency. `--json` gives
+// us the filename without guessing how npm normalises scoped package names.
+let packResult;
+try {
+	packResult = JSON.parse(
+		execFileSync(
+			"npm",
+			["pack", DIST_DIR, "--pack-destination", TEST_DIR, "--json"],
+			{ encoding: "utf8", stdio: ["ignore", "pipe", "inherit"] },
+		),
+	);
+} catch (error) {
+	fail(`npm pack failed: ${error.message}`);
+}
+const tarballName = packResult?.[0]?.filename;
+if (!tarballName) fail("npm pack did not report a tarball filename");
+const tarballPath = resolve(TEST_DIR, tarballName);
+if (!existsSync(tarballPath)) fail(`npm pack did not create ${tarballPath}`);
+for (const required of [
+	"build-info.json",
+	"manifest.json",
+	"bin/cli.mjs",
+	"scripts/anime/providers/bangumi.mjs",
+	"scripts/anime/providers/bilibili.mjs",
+]) {
+	if (!packResult[0].files?.some((file) => file.path === required)) {
+		fail(`packed tarball is missing ${required}`);
+	}
+}
+console.log(`[validate] ✓ packed ${tarballName} (${packResult[0].files?.length ?? 0} files)`);
 
 await writeFile(
 	join(TEST_DIR, "package.json"),
@@ -65,7 +98,7 @@ await writeFile(
 				// the tree's transitive typescript 4.9.x does not; a real Astro
 				// project carries typescript anyway.
 				typescript: "^5.3.3",
-				[PACKAGE_NAME]: `file:${DIST_DIR}`,
+				[PACKAGE_NAME]: `file:${tarballPath}`,
 			},
 		},
 		null,
@@ -130,6 +163,36 @@ for (const relativePath of expected) {
 	}
 }
 console.log(`[validate] ✓ scaffold contains ${expected.length} expected entries`);
+if (!(await readFile(join(TEST_DIR, ".gitignore"), "utf8")).includes(".shirones-backup/")) {
+	fail("generated .gitignore does not ignore .shirones-backup/");
+}
+
+// `--force` deliberately replaces the scaffold. The safety contract is that
+// the complete previous tree is moved to `.shirones-backup/` first. Keep this
+// regression test next to the real init flow so future CLI changes cannot
+// silently delete the recovery copy.
+const postFiles = (await readdir(join(TEST_DIR, CONTENT_ROOT, "content/posts")))
+	.filter((name) => /\.(md|mdx)$/.test(name));
+if (postFiles.length === 0) fail("init produced no post file for the force-safety check");
+const forcePost = join(TEST_DIR, CONTENT_ROOT, "content/posts", postFiles[0]);
+const forceMarker = "\n<!-- shirones validate force-safety marker -->\n";
+await writeFile(forcePost, `${await readFile(forcePost, "utf8")}${forceMarker}`, "utf8");
+const forcePublic = join(TEST_DIR, "public", ".shirones-validate-user-file");
+await writeFile(forcePublic, "user-owned public asset\n", "utf8");
+run(packageManager, ["exec", "shirones", "init", "--force"]);
+if ((await readFile(forcePost, "utf8")).includes(forceMarker)) {
+	fail("init --force did not replace user content from the template");
+}
+const backupPost = join(TEST_DIR, ".shirones-backup", CONTENT_ROOT, "content/posts", postFiles[0]);
+const backupPublic = join(TEST_DIR, ".shirones-backup", "public", ".shirones-validate-user-file");
+if (!existsSync(backupPost)) fail("init --force did not back up user content");
+if (!existsSync(backupPublic)) fail("init --force did not back up a user public asset");
+if (!existsSync(join(TEST_DIR, ".shirones-backup", "README.md"))) {
+	fail("init --force did not preserve the replaced README in .shirones-backup");
+}
+console.log("[validate] ✓ init --force replaces the scaffold and backs up the previous copy");
+console.log("[validate] running `info`");
+run(packageManager, ["exec", "shirones", "info"]);
 
 // The user project must contain exactly one Astro config, at the root.
 const strayConfigs = (await readdir(join(TEST_DIR, CONTENT_ROOT))).filter((name) =>
