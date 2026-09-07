@@ -395,19 +395,22 @@ if (PACKAGE_NAME !== "shirones") bin[PACKAGE_NAME] = "bin/cli.mjs";
 
 // Pin the published package to the pnpm that actually builds it — `init`
 // echoes this into the user's package.json so a fresh project pins the same
-// pnpm the package was built and validated with. In the publish workflow this
-// is the `latest` pnpm from `pnpm/setup@v2` (captured via `pnpm --version`);
-// locally it is whatever pnpm runs this build.
-let pnpmVersion = (process.env.PNPM_VERSION ?? "").trim();
-if (!pnpmVersion) {
+// pnpm the package was built and validated with. Prefer the explicit value,
+// then the package-manager user-agent inherited by `pnpm run`, and finally a
+// direct executable lookup for builds launched outside pnpm.
+function detectPnpmVersion() {
+	const explicit = (process.env.PNPM_VERSION ?? "").trim();
+	if (explicit) return explicit;
+	const agent = process.env.npm_config_user_agent ?? "";
+	const fromAgent = agent.match(/(?:^|\s)pnpm\/(\d+(?:\.\d+){1,2}(?:-[0-9A-Za-z.-]+)?)/)?.[1];
+	if (fromAgent) return fromAgent;
 	try {
-		pnpmVersion = execFileSync("pnpm", ["--version"], {
-			encoding: "utf8",
-		}).trim();
+		return execFileSync("pnpm", ["--version"], { encoding: "utf8" }).trim();
 	} catch {
-		pnpmVersion = "";
+		return "";
 	}
 }
+const pnpmVersion = detectPnpmVersion();
 
 const pkg = {
 	name: PACKAGE_NAME,
@@ -509,12 +512,7 @@ try {
 } catch {
 	// Local builds from source archives do not have to be Git checkouts.
 }
-let pnpmBuildVersion = "unknown";
-try {
-	pnpmBuildVersion = execFileSync("pnpm", ["--version"], { encoding: "utf8" }).trim();
-} catch {
-	// pnpm is optional for syntax-only/local inspection runs.
-}
+const pnpmBuildVersion = pnpmVersion || "unknown";
 await writeFile(
 	join(DIST_DIR, "build-info.json"),
 	`${JSON.stringify(
