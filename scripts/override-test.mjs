@@ -365,6 +365,7 @@ const KNOWN_UNREACHABLE = new Set([
 	"components-organisms-BackToTop",
 	// Feature-gated (comments disabled, no umami configured in this test).
 	"components-organisms-comment-CommentSection",
+	"components-organisms-comment-Giscus",
 	"components-organisms-comment-Twikoo",
 	"components-system-UmamiRuntime",
 	// Loaded by the integration, not through import resolution.
