@@ -392,6 +392,30 @@ async function checkDevServer() {
 			console.log(`  ${route} → ${response.status} (${body.length} bytes)`);
 		}
 		console.log(`[validate] ✓ dev server rendered ${routes.length} routes`);
+
+		// Rendered HTML proves nothing about the *client* module graph: pages
+		// are rendered server-side, while `vite:import-analysis` only runs when
+		// the browser requests a module. The `@swup/astro` integration injects
+		// a page script whose bare imports (`@swup/astro/serialise`,
+		// `@swup/astro/idle`, `@swup/astro/client/*`) Vite transforms on demand
+		// from the virtual module `astro:scripts/page.js`. When those failed to
+		// resolve under pnpm's strict layout, every route above still returned
+		// 200 and only the module 500'd — in a user's browser, not here. Fetch
+		// it so dev-only resolution regressions fail this check instead.
+		const injected = "/@id/astro:scripts/page.js";
+		const scriptResponse = await get(injected);
+		const scriptBody = await scriptResponse.text();
+		if (!scriptResponse.ok) {
+			devFail(`dev server returned ${scriptResponse.status} for ${injected}`);
+		}
+		if (scriptBody.includes("Failed to resolve import")) {
+			devFail(`dev server could not resolve an import inside ${injected}`);
+		}
+		if (!scriptBody.includes("swup")) {
+			devFail(`${injected} does not look like the injected page script`);
+		}
+		console.log(`  ${injected} → ${scriptResponse.status} (${scriptBody.length} bytes)`);
+		console.log("[validate] ✓ dev server transformed the injected page script");
 	} finally {
 		await stop();
 	}
