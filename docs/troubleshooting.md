@@ -186,3 +186,46 @@ Three gaps stacked up:
 
 If a user reports "dev is broken but the deployed site works", reproduce with
 `pnpm validate` in full mode before anything else.
+
+### Config parity
+
+**`validate` fails with "astro.config.mjs sets config the integration does not".**
+The theme is configured twice by hand and nothing is shared between the two
+declarations, so one side gets a change and the other does not. Package mode
+never reads `astro.config.mjs` — it reads the integration's `updateConfig()` —
+and source mode never runs the integration. A key present on only one side
+means it silently does not apply in the other mode. Add it to both, or, if it
+genuinely should differ, record it in the `PACKAGE_ONLY_KEYS` /
+`SOURCE_ONLY_KEYS` sets at the top of the check in `scripts/validate.mjs` with
+a comment saying why. `image` is already there: the integration hand-supplies
+the trailing slash on `image.endpoint.route` that Astro's relative transform
+would have appended had `trailingSlash` been set before that transform ran.
+
+**`validate` fails with "the two entry points install different integrations".**
+Both sides hand-list the integration set, so an integration added to one is
+missing from the other. Install it on both sides. `EXPECTED_INTEGRATIONS` in
+`scripts/validate.mjs` is the fixed list the check works from; a new
+integration upstream means adding it there too, otherwise the check passes
+without ever looking at it.
+
+**`validate` reports different integration option sizes but still passes.**
+Intentional. Options inside those calls are not asserted, because several
+differ legitimately — package mode pre-bundles defensively and aliases
+`@iconify/svelte` to the offline build, source mode subsets fonts at build
+time. The sizes are printed so a change in shape is visible in review. Treat a
+size change as a prompt to check both sides by hand, not as a result. Three
+real drifts were found this way and are still open:
+
+- `sitemap()` — source mode passes `filter: isSitemapPageAllowed`
+  (`src/config/sitemapFilter.ts`); the integration passes nothing, so disabled
+  pages leak into npm users' `sitemap.xml`.
+- `swup().updateHead.persistTags` — source mode carries
+  `:not([data-swup-optional])` selectors, the integration does not, so stale
+  stylesheets persist for npm users.
+- `vite.build.esbuild` — source mode sets `drop: ["debugger"]` and
+  `pure: ["console.log", "console.debug"]`; the integration does not, so npm
+  builds keep their console output.
+
+All three are symptoms of the duplication itself. Removing it is tracked as the
+single-source config plan; until it lands, keep both sides in sync by hand and
+let this check catch the keys and integration lists.

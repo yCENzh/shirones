@@ -137,22 +137,37 @@ non-negotiable:
   upstream also declares — that is how `sharp` drifted a minor behind and
   users' dev servers failed with `MissingSharp`.
 - A missing `exports` entry surfaces later as an opaque *"X is not a function"*
-  in the user's build, so the entries are validated in step 3 rather than
-  trusted.
+  in the user's build, so the entries are validated in the `pnpm validate`
+  tarball check rather than trusted.
 
 ## 3. `pnpm validate` — `scripts/validate.mjs`
 
 The only step that proves the package actually works:
 
-1. `npm pack` the `dist/` directory into a real tarball and assert required
+1. Assert the two Astro config entry points have not drifted. The theme is
+   configured twice by hand: `astro.config.mjs` (`defineConfig`, source mode)
+   and `src/integration/index.ts` (`updateConfig` + `createBundledIntegrations`,
+   package mode). Neither imports the other, so a change to one silently skips
+   the other — package mode never reads `astro.config.mjs`, and source mode
+   never runs the integration. The check compares the *shape* only: the set of
+   config keys each side sets, the `vite` sub-keys each side touches, and the
+   integrations each side installs (`EXPECTED_INTEGRATIONS`). The options
+   inside those calls are **not** compared — several differ legitimately
+   (package mode pre-bundles defensively and aliases `@iconify/svelte` to the
+   offline build; source mode subsets fonts at build time) — they are printed
+   as call sizes so a change in shape is visible in the log. Skipped when
+   `workspace/` has not been synced. See
+   [troubleshooting](troubleshooting.md#config-parity) for the drift this
+   catches.
+2. `npm pack` the `dist/` directory into a real tarball and assert required
    files are in the packed file list.
-2. Create a scratch project in a temp directory and install that tarball with
+3. Create a scratch project in a temp directory and install that tarball with
    the real package manager — *not* by copying into `node_modules`, which
    skips lifecycle scripts and dependency resolution and therefore proves
    nothing.
-3. Run `shirones init` in it.
-4. Run `astro build` and assert the expected routes were emitted.
-5. Start `astro dev` and exercise it the way a browser would
+4. Run `shirones init` in it.
+5. Run `astro build` and assert the expected routes were emitted.
+6. Start `astro dev` and exercise it the way a browser would
    (`checkDevServer`), because dev and build fail in different ways — the
    overlay resolver and the SSR shims are only exercised by one of them.
    Rendered HTML alone proves nothing about the client module graph: pages

@@ -46,6 +46,290 @@ function fail(message) {
 	process.exit(1);
 }
 
+// ── Assert the two Astro config entry points have not drifted ───────────────
+//
+// The theme is configured twice, by hand, with nothing shared between them:
+//
+//   - `astro.config.mjs` — source mode. `defineConfig({ … })` in the repo root.
+//   - `src/integration/index.ts` — package mode. `updateConfig({ … })` inside
+//     `astro:config:setup`, plus the list built by `createBundledIntegrations()`.
+//
+// Neither file imports the other, so a change to one silently skips the other.
+// That is how `sitemap()` lost its `filter`, how swup's `persistTags` lost its
+// `:not([data-swup-optional])` selectors, and why `trailingSlash: "always"`
+// needs a hand-written `image.endpoint.route` on the package side only: Astro
+// normalises that route during `resolveConfig`, which source mode reaches with
+// `trailingSlash` already set but package mode reaches before `updateConfig`
+// has set it.
+//
+// The *shape* — which config keys each side sets, which `vite` sub-keys each
+// side touches, which integrations each side installs — is mechanical enough to
+// assert. The options inside those calls are not compared; several differ
+// legitimately (package mode pre-bundles defensively, source mode subsets fonts
+// at build time), so they are reported for review instead.
+
+/**
+ * Keys at the top level of the object literal that starts at `openBrace`.
+ *
+ * Hand-rolled because the check runs before any dependency is installed. Three
+ * cases make a naive `split(",")` or brace count wrong, and all three occur in
+ * these files:
+ *
+ *   - `...(cond ? { site: x } : {})` — a conditional spread carries real keys
+ *     one level deeper, so braces inside a spread group do not change depth;
+ *   - `createAliases(paths)` — an identifier in an argument list is not a key,
+ *     so `(`/`[` are tracked separately from `{`;
+ *   - `integrations,` — a shorthand property has no colon.
+ */
+function objectKeys(source, openBrace) {
+	const keys = [];
+	const stack = [];
+	let objectDepth = 0;
+	let callDepth = 0;
+	let spreadGroups = 0;
+	for (let i = openBrace; i < source.length; i += 1) {
+		const char = source[i];
+		if (char === "{" || char === "[" || char === "(") {
+			const isSpreadOpen = char === "(" && source.startsWith("...", i - 3);
+			if (isSpreadOpen) spreadGroups += 1;
+			else if (char !== "{") callDepth += 1;
+			const counted = char === "{" && spreadGroups === 0;
+			if (counted) objectDepth += 1;
+			stack.push({ isSpreadOpen, counted, isCall: !isSpreadOpen && char !== "{" });
+			continue;
+		}
+		if (char === "}" || char === "]" || char === ")") {
+			const opened = stack.pop();
+			if (opened === undefined) break;
+			if (opened.isSpreadOpen) spreadGroups -= 1;
+			if (opened.counted) objectDepth -= 1;
+			if (opened.isCall) callDepth -= 1;
+			if (stack.length === 0) break;
+			continue;
+		}
+		if (objectDepth !== 1 || callDepth !== 0) continue;
+		const key = /^([A-Za-z_$][\w$]*)/.exec(source.slice(i));
+		if (!key) continue;
+		// A key follows `{` or `,`; anything else (an operator, a value) does not.
+		if (!/[,{]\s*$/.test(source.slice(Math.max(0, i - 200), i))) continue;
+		const after = /^\s*[,:}]/.exec(source.slice(i + key[0].length));
+		if (!after) continue;
+		keys.push(key[1]);
+		i += key[0].length - 1;
+	}
+	return [...new Set(keys)];
+}
+
+/** The balanced `{ … }` block of the `name:` property inside `parentText`. */
+function childBlock(parentText, name) {
+	const at = new RegExp(`(?:^|[,{])\\s*${name}\\s*:`).exec(parentText);
+	if (!at) return null;
+	const open = parentText.indexOf("{", at.index + at[0].length);
+	if (open === -1) return null;
+	let depth = 0;
+	for (let i = open; i < parentText.length; i += 1) {
+		if (parentText[i] === "{") depth += 1;
+		else if (parentText[i] === "}") {
+			depth -= 1;
+			if (depth === 0) return parentText.slice(open, i + 1);
+		}
+	}
+	return null;
+}
+
+/** The balanced `[ … ]` or `{ … }` block of the `name:` property. */
+function childValue(parentText, name) {
+	const at = new RegExp(`(?:^|[,{])\\s*${name}\\s*:`).exec(parentText);
+	if (!at) return null;
+	const rest = parentText.slice(at.index + at[0].length);
+	const open = rest.search(/[[{]/);
+	if (open === -1) return null;
+	const closer = rest[open] === "[" ? "]" : "}";
+	let depth = 0;
+	for (let i = open; i < rest.length; i += 1) {
+		if (rest[i] === rest[open]) depth += 1;
+		else if (rest[i] === closer) {
+			depth -= 1;
+			if (depth === 0) return rest.slice(open, i + 1);
+		}
+	}
+	return null;
+}
+
+/**
+ * The integrations both entry points are expected to install.
+ *
+ * Listed explicitly rather than discovered by scanning for `name(`: a scan
+ * picks up CSS selectors inside string literals (`:not([data-swup-optional])`
+ * reads as a call to `not`) and silently accepts whatever happens to be there.
+ * A fixed list turns "an integration went missing" into a diff, and adding one
+ * upstream means adding it here too.
+ */
+const EXPECTED_INTEGRATIONS = [
+	"swup",
+	"icon",
+	"expressiveCode",
+	"svelte",
+	"sitemap",
+	"mdx",
+	"umami (conditional spread)",
+];
+
+/** Which of `EXPECTED_INTEGRATIONS` a block installs. */
+function integrationsInstalled(blockText) {
+	const installed = new Set();
+	for (const name of EXPECTED_INTEGRATIONS) {
+		const pattern = name.endsWith("(conditional spread)")
+			? /\.\.\.\s*\(\s*[a-z][\w$]*\s*\?/
+			: new RegExp(`\\b${name}\\s*\\(`);
+		if (pattern.test(blockText)) installed.add(name);
+	}
+	return installed;
+}
+
+const SOURCE_CONFIG = join(resolve("workspace"), "astro.config.mjs");
+const INTEGRATION_SOURCE = join(
+	resolve("workspace"),
+	"src/integration/index.ts",
+);
+
+if (!existsSync(SOURCE_CONFIG) || !existsSync(INTEGRATION_SOURCE)) {
+	console.log("[validate] – skipping config-parity check (workspace not synced)");
+} else {
+	const sourceFile = await readFile(SOURCE_CONFIG, "utf8");
+	const integrationFile = await readFile(INTEGRATION_SOURCE, "utf8");
+
+	const defineAt = sourceFile.indexOf("export default defineConfig(");
+	if (defineAt === -1) fail("could not locate defineConfig() in astro.config.mjs");
+	const defineOpen = sourceFile.indexOf("{", defineAt);
+	const sourceKeys = objectKeys(sourceFile, defineOpen);
+
+	// The whole defineConfig object, as text, for the nested lookups below.
+	const sourceObject = (() => {
+		let depth = 0;
+		for (let i = defineOpen; i < sourceFile.length; i += 1) {
+			if (sourceFile[i] === "{") depth += 1;
+			else if (sourceFile[i] === "}") {
+				depth -= 1;
+				if (depth === 0) return sourceFile.slice(defineOpen, i + 1);
+			}
+		}
+		fail("defineConfig() object is never closed");
+	})();
+	const updateAt = integrationFile.indexOf("updateConfig(");
+	if (updateAt === -1) fail("could not locate updateConfig() in the integration");
+	const updateOpen = integrationFile.indexOf("{", updateAt);
+	const packageKeys = objectKeys(integrationFile, updateOpen);
+	const packageObject = (() => {
+		let depth = 0;
+		for (let i = updateOpen; i < integrationFile.length; i += 1) {
+			if (integrationFile[i] === "{") depth += 1;
+			else if (integrationFile[i] === "}") {
+				depth -= 1;
+				if (depth === 0) return integrationFile.slice(updateOpen, i + 1);
+			}
+		}
+		fail("updateConfig() object is never closed");
+	})();
+
+	// `image` is package-only by design: it hand-supplies the trailing slash on
+	// the image endpoint route that Astro's relative transform would have
+	// appended had `trailingSlash` been set before that transform ran.
+	const PACKAGE_ONLY_KEYS = new Set(["image"]);
+	const SOURCE_ONLY_KEYS = new Set([]);
+
+	const missingInPackage = sourceKeys.filter(
+		(key) => !packageKeys.includes(key) && !SOURCE_ONLY_KEYS.has(key),
+	);
+	const missingInSource = packageKeys.filter(
+		(key) => !sourceKeys.includes(key) && !PACKAGE_ONLY_KEYS.has(key),
+	);
+	if (missingInPackage.length > 0) {
+		fail(
+			`astro.config.mjs sets config the integration does not: ${missingInPackage.join(", ")}\n` +
+				"  Package mode reads the integration's updateConfig(), not astro.config.mjs,\n" +
+				"  so anything set only there never reaches npm users.",
+		);
+	}
+	if (missingInSource.length > 0) {
+		fail(
+			`the integration sets config astro.config.mjs does not: ${missingInSource.join(", ")}\n` +
+				"  Source mode never runs the integration, so anything set only there\n" +
+				"  does not apply to the repo's own site.",
+		);
+	}
+	console.log(
+		`[validate] ✓ config keys match (${sourceKeys.length}: ${sourceKeys.join(", ")})`,
+	);
+
+	const sourceVite = childBlock(sourceObject, "vite");
+	const packageVite = childBlock(packageObject, "vite");
+	if (!sourceVite || !packageVite) fail("could not locate a vite block on both sides");
+	const sourceViteKeys = objectKeys(sourceVite, 0);
+	const packageViteKeys = objectKeys(packageVite, 0);
+	const viteDrift = [
+		...sourceViteKeys.filter((key) => !packageViteKeys.includes(key)),
+		...packageViteKeys.filter((key) => !sourceViteKeys.includes(key)),
+	];
+	if (viteDrift.length > 0) {
+		fail(`the two entry points touch different vite sub-keys: ${viteDrift.join(", ")}`);
+	}
+	console.log(`[validate] ✓ vite sub-keys match (${sourceViteKeys.join(", ")})`);
+
+	const sourceIntegrations = childValue(sourceObject, "integrations");
+	if (!sourceIntegrations) fail("could not locate integrations[] in astro.config.mjs");
+	const bundledAt = integrationFile.indexOf("async function createBundledIntegrations");
+	if (bundledAt === -1) fail("could not locate createBundledIntegrations()");
+	const bundledText = integrationFile.slice(bundledAt);
+
+	const sourceList = integrationsInstalled(sourceIntegrations);
+	const packageList = integrationsInstalled(bundledText);
+	if (sourceList.size === 0) {
+		fail("no known integrations found in astro.config.mjs — is EXPECTED_INTEGRATIONS stale?");
+	}
+	const listDrift = [
+		...[...sourceList].filter((name) => !packageList.has(name)),
+		...[...packageList].filter((name) => !sourceList.has(name)),
+	];
+	if (listDrift.length > 0) {
+		fail(
+			`the two entry points install different integrations: ${listDrift.join(", ")}\n` +
+				`  source mode:  ${[...sourceList].sort().join(", ")}\n` +
+				`  package mode: ${[...packageList].sort().join(", ")}`,
+		);
+	}
+	console.log(
+		`[validate] ✓ integrations match (${[...sourceList].sort().join(", ")})`,
+	);
+
+	// Options are deliberately not asserted. Report their size so a change in
+	// shape is visible in the log; the known real drift is tracked in
+	// docs/pipeline.md.
+	console.log("[validate] – integration options are not compared; call sizes for review:");
+	for (const name of EXPECTED_INTEGRATIONS) {
+		if (name.endsWith("(conditional spread)")) continue;
+		const size = (text) => {
+			const at = new RegExp(`\\b${name}\\s*\\(`).exec(text);
+			if (!at) return "absent";
+			let depth = 0;
+			for (let i = at.index + name.length; i < text.length; i += 1) {
+				if (text[i] === "(") depth += 1;
+				else if (text[i] === ")") {
+					depth -= 1;
+					if (depth === 0) return `${i - (at.index + name.length)} chars`;
+				}
+			}
+			return "unterminated";
+		};
+		const fromSource = size(sourceIntegrations);
+		const fromPackage = size(bundledText);
+		const flag = fromSource === fromPackage ? " " : "≠";
+		console.log(
+			`    ${flag} ${name.padEnd(15)} source: ${String(fromSource).padEnd(11)} package: ${fromPackage}`,
+		);
+	}
+}
+
 console.log("[validate] preparing throwaway project");
 
 await rm(TEST_DIR, { recursive: true, force: true });
