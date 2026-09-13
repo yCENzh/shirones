@@ -74,8 +74,12 @@ jobs:
       - name: Build package and manifest
         run: pnpm build
       - parallel:
-        - name: Validate packed package lifecycle
-          run: SHIRONES_VALIDATE_BUILD=0 pnpm validate
+        # Full mode on purpose: the dev-server smoke test (module-graph crawl
+        # included) is the only check that exercises `astro dev`, and a
+        # dev-only resolution regression once shipped because this step ran
+        # with SHIRONES_VALIDATE_BUILD=0. See docs/troubleshooting.md.
+        - name: Validate packed package lifecycle and dev server
+          run: pnpm validate
 
         - name: Validate config and component overrides
           run: SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test

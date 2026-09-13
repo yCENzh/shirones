@@ -153,3 +153,36 @@ loop.
 Almost always because the package was tested by copying `dist/` into
 `node_modules/<pkg>` instead of installing a packed tarball. That skips
 lifecycle scripts and real dependency resolution. Always `npm pack` + install.
+
+**A dev-only resolution bug (0.1.2, `@swup/astro/serialise` & friends) reached
+users while every pipeline check was green.**
+Three gaps stacked up:
+
+1. The failure existed only in `astro dev`. Production builds resolved the
+   injected script's imports through the theme's fallback resolver; the dev
+   server died on them because Vite 8's builtin resolver answers an
+   unresolvable bare specifier from a virtual importer with a root-relative
+   pseudo path instead of `null`, which made the fallback resolver stand down.
+   Fixed in the theme (`isGenuineResolution` in `fallback-resolver.ts`).
+2. The Build & Publish workflow ran `validate` with
+   `SHIRONES_VALIDATE_BUILD=0`, so `astro dev` never started anywhere in CI.
+   The workflow now runs the full mode.
+3. Even when the dev smoke test ran, it only fetched rendered HTML — pages
+   render server-side, so a module that 500s during on-demand transform stays
+   invisible. `checkDevServer()` now crawls the client module graph (scripts,
+   stylesheets and their transitive imports), re-seeds when Vite re-optimizes
+   dependencies mid-crawl, asserts no bare `@swup/astro/*` specifiers survive
+   in the transformed page script, and scans the dev server log for error
+   lines. Its timeouts were also widened (60 s per attempt, 120 s per route):
+   the old 5 s/30 s budget flaked on cold or memory-constrained machines and
+   had never been exercised by CI.
+   One known false positive is exempted: Astro injects the dev toolbar with a
+   bare `/@id/astro/runtime/client/dev-toolbar/entrypoint.js` URL that maps
+   to a pre-bundled dep, and once Vite re-bundles mid-session that exact URL
+   keeps answering 504 "Outdated Optimize Dep" until the server restarts —
+   for a real browser too, so it is not a theme regression. The crawl skips
+   unversioned URLs that appear in Vite's optimizer metadata (and reports
+   them); every other stale or failing module still fails the check.
+
+If a user reports "dev is broken but the deployed site works", reproduce with
+`pnpm validate` in full mode before anything else.

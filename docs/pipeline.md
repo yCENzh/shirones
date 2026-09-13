@@ -142,17 +142,31 @@ The only step that proves the package actually works:
    nothing.
 3. Run `shirones init` in it.
 4. Run `astro build` and assert the expected routes were emitted.
-5. Start `astro dev` and request a page (`checkDevServer`), because dev and
-   build fail in different ways — the overlay resolver and the SSR shims are
-   only exercised by one of them.
+5. Start `astro dev` and exercise it the way a browser would
+   (`checkDevServer`), because dev and build fail in different ways — the
+   overlay resolver and the SSR shims are only exercised by one of them.
+   Rendered HTML alone proves nothing about the client module graph: pages
+   render server-side, while `vite:import-analysis` only transforms a module
+   when it is requested. So the check renders a set of routes, fetches the
+   injected `astro:scripts/page.js` (asserting no bare `@swup/astro/*`
+   specifiers survived transformation), then crawls the module graph — every
+   `<script>` and stylesheet the pages reference, then every import inside
+   those modules, re-seeding from fresh HTML when Vite re-optimizes
+   dependencies mid-crawl — and finally scans the server log for error lines.
+   Unversioned URLs that Vite has pre-bundled (Astro's own dev toolbar) are
+   reported and skipped: after a mid-session re-bundle they answer 504 until
+   the server restarts, in a browser as much as here. See
+   [troubleshooting](troubleshooting.md#validation) for the details.
 
 Set `SHIRONES_VALIDATE_BUILD=0` to skip the build/dev portion when iterating on
 earlier steps. The tarball install and lifecycle checks still run. The
-Build & Publish workflow uses this mode deliberately: `override-test` already
-performs the full baseline and override Astro builds, so running another full
-build and dev server in `validate` would duplicate the expensive part. Run
-`pnpm validate` without this variable when the dev-server smoke test itself is
-the thing being investigated.
+Build & Publish workflow runs the **full** mode: the dev smoke test is the only
+place `astro dev` is exercised anywhere in the pipeline, and skipping it as
+duplicate work is how a dev-only module-resolution regression (the 0.1.2
+`@swup/astro` subpaths) once reached users — see `docs/troubleshooting.md`.
+Run `pnpm validate` without this variable whenever the dev-server smoke test
+itself is the thing being investigated.
+
 
 ## Configuration
 

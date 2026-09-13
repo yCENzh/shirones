@@ -321,14 +321,19 @@ async function checkDevServer() {
 		// `ready in` is printed a beat before the socket accepts connections.
 		// Use one total deadline, rather than resetting a long timeout for every
 		// retry. A broken dev server must fail the check, not hold the release.
+		// Cold transforms are slow: the first homepage render compiles the
+		// whole SSR graph, and module requests can queue behind dependency
+		// optimization. Tight per-attempt timeouts made this flake on cold or
+		// memory-constrained machines — and CI had never exercised these
+		// values because the release workflow used to skip the dev phase.
 		const get = async (route) => {
-			const deadline = Date.now() + 30_000;
+			const deadline = Date.now() + 120_000;
 			let lastError;
 			while (Date.now() < deadline) {
 				const remaining = deadline - Date.now();
 				try {
 					return await fetch(`http://127.0.0.1:${port}${route}`, {
-						signal: AbortSignal.timeout(Math.min(5_000, remaining)),
+						signal: AbortSignal.timeout(Math.min(60_000, remaining)),
 					});
 				} catch (error) {
 					lastError = error;
@@ -338,7 +343,7 @@ async function checkDevServer() {
 				}
 			}
 			throw new Error(
-				`dev server did not respond for ${route} within 30s: ${lastError?.message ?? "unknown error"}`,
+				`dev server did not respond for ${route} within 120s: ${lastError?.message ?? "unknown error"}`,
 			);
 		};
 
@@ -381,6 +386,7 @@ async function checkDevServer() {
 		}
 
 		if (routes.length === 0) devFail("no dev-server routes could be selected");
+		const seedHtml = [];
 		for (const route of routes) {
 			const response = await get(route);
 			const body = await response.text();
@@ -389,6 +395,7 @@ async function checkDevServer() {
 				devFail(`dev server rendered an error page for ${route}`);
 			}
 			if (body.length < 500) devFail(`dev server returned a suspiciously small ${route}`);
+			seedHtml.push(body);
 			console.log(`  ${route} → ${response.status} (${body.length} bytes)`);
 		}
 		console.log(`[validate] ✓ dev server rendered ${routes.length} routes`);
@@ -400,8 +407,7 @@ async function checkDevServer() {
 		// `@swup/astro/idle`, `@swup/astro/client/*`) Vite transforms on demand
 		// from the virtual module `astro:scripts/page.js`. When those failed to
 		// resolve under pnpm's strict layout, every route above still returned
-		// 200 and only the module 500'd — in a user's browser, not here. Fetch
-		// it so dev-only resolution regressions fail this check instead.
+		// 200 and only the module 500'd — in a user's browser, not here.
 		const injected = "/@id/astro:scripts/page.js";
 		const scriptResponse = await get(injected);
 		const scriptBody = await scriptResponse.text();
@@ -414,8 +420,189 @@ async function checkDevServer() {
 		if (!scriptBody.includes("swup")) {
 			devFail(`${injected} does not look like the injected page script`);
 		}
+		// A transformed module must reference real dev URLs. A bare package
+		// specifier surviving in the output means the import was never
+		// resolved — the exact shape of the 0.1.2 regression, asserted here
+		// semantically so it cannot reappear through a different code path.
+		if (/'@swup\/astro\//.test(scriptBody)) {
+			devFail(`${injected} still contains bare @swup/astro specifiers instead of resolved URLs`);
+		}
 		console.log(`  ${injected} → ${scriptResponse.status} (${scriptBody.length} bytes)`);
 		console.log("[validate] ✓ dev server transformed the injected page script");
+
+		// ── Walk the client module graph the way a browser would ─────────────
+		//
+		// The injected script is one known regression; this crawl is the
+		// generic net. Every <script> and stylesheet the rendered pages
+		// reference is fetched, and every import inside those modules is
+		// followed, so a resolution or transform failure anywhere in the
+		// client graph fails here instead of in a user's devtools.
+		const MAX_CRAWLED_MODULES = 600;
+		const decode = (url) => url.replace(/&amp;/g, "&");
+		const isCssUrl = (url) => /[.]css(\?|$)/.test(url) || url.includes("type=style");
+		const scriptAndStyleUrls = (html) => {
+			const urls = [];
+			for (const tag of html.matchAll(/<script\b[^>]*>/g)) {
+				const src = tag[0].match(/\ssrc=["']([^"']+)["']/);
+				if (src) urls.push(decode(src[1]));
+			}
+			for (const tag of html.matchAll(/<link\b[^>]*>/g)) {
+				if (!/rel=["']stylesheet["']/.test(tag[0])) continue;
+				const href = tag[0].match(/href=["']([^"']+)["']/);
+				if (href) urls.push(decode(href[1]));
+			}
+			return urls.filter((url) => url.startsWith("/") && !url.startsWith("//"));
+		};
+		const importUrls = (js) => {
+			const urls = [];
+			for (const match of js.matchAll(
+				/(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s+)["']([^"']+)["']/g,
+			)) {
+				if (match[1].startsWith("/") && !match[1].startsWith("//")) urls.push(match[1]);
+			}
+			return urls;
+		};
+		// Upstream quirk (Vite 8 + Astro 7, probe-verified): Astro injects the
+		// dev toolbar as a bare `/@id/astro/runtime/client/dev-toolbar/
+		// entrypoint.js` URL with no `?v=` query, and that specifier is a
+		// pre-bundled optimizer dep. Once a mid-session re-bundle wave lands,
+		// the module graph keeps the bare URL pinned to the old browserHash
+		// and answers 504 "Outdated Optimize Dep" indefinitely — for a real
+		// browser reloading the page exactly as for this crawl. Nothing the
+		// theme can fix, and the toolbar ships in no production build, so
+		// such URLs are skipped with a warning. The match is deliberately
+		// narrow (504 + unversioned URL + present in the current optimizer
+		// metadata): theme modules are never metadata keys, so a genuine
+		// resolution regression cannot hide behind this exemption.
+		const skippedStaleDeps = new Set();
+		const isStaleOptimizedDepSource = async (url) => {
+			if (/[?&]v=/.test(url)) return false;
+			const { pathname } = new URL(url, "http://127.0.0.1");
+			const specifier = decodeURIComponent(pathname).replace(/^\/@id\//, "");
+			try {
+				const metadata = JSON.parse(
+					await readFile(
+						join(TEST_DIR, "node_modules", ".vite", "deps", "_metadata.json"),
+						"utf8",
+					),
+				);
+				return Boolean(metadata.optimized?.[specifier]);
+			} catch {
+				return false;
+			}
+		};
+		const getModule = async (url) => {
+			for (let tries = 0; ; tries += 1) {
+				const response = await get(url);
+				const body = await response.text();
+				if (response.status === 504 || body.includes("Outdated Optimize Dep")) {
+					if (await isStaleOptimizedDepSource(url)) {
+						skippedStaleDeps.add(url);
+						return null;
+					}
+					// Vite re-optimized dependencies mid-crawl and invalidated
+					// the URLs we hold. A browser would full-reload; signal
+					// the caller to re-seed from freshly rendered HTML.
+					if (tries >= 6) {
+						const stale = new Error(`module stayed stale after re-optimization: ${url}`);
+						stale.stale = true;
+						throw stale;
+					}
+					await new Promise((r) => setTimeout(r, 1_000));
+					continue;
+				}
+				if (!response.ok) devFail(`dev server returned ${response.status} for module ${url}`);
+				if (body.includes("Failed to resolve import")) {
+					devFail(`dev server could not resolve an import inside ${url}`);
+				}
+				if ((response.headers.get("content-type") ?? "").includes("text/html")) {
+					devFail(`module ${url} answered an HTML page instead of a transformed module`);
+				}
+				return body;
+			}
+		};
+		const crawlModuleGraph = async (seeds) => {
+			const seen = new Set();
+			const queue = seeds.flatMap(scriptAndStyleUrls);
+			while (queue.length > 0 && seen.size < MAX_CRAWLED_MODULES) {
+				const url = queue.shift();
+				if (seen.has(url)) continue;
+				seen.add(url);
+				const body = await getModule(url);
+				// A null body is a skipped stale pre-bundled dep (see
+				// isStaleOptimizedDepSource); there is nothing to follow.
+				if (body && !isCssUrl(url)) queue.push(...importUrls(body));
+			}
+			return seen.size;
+		};
+
+		// The crawl itself feeds the optimizer: every newly discovered import
+		// can trigger a re-bundle and full-reload wave that invalidates the
+		// URLs we hold. Re-seeding into an active wave just collects stale
+		// URLs again, so wait for the log to go quiet before re-fetching.
+		const optimizerActivityRe =
+			/\[optimizer\]|optimized dependencies changed|dependencies optimized|Forced re-optimization/g;
+		const waitForOptimizerQuiescence = async () => {
+			const deadline = Date.now() + 60_000;
+			let lastCount = -1;
+			let quietSince = Date.now();
+			while (Date.now() < deadline) {
+				const count = (output.match(optimizerActivityRe) ?? []).length;
+				if (count !== lastCount) {
+					lastCount = count;
+					quietSince = Date.now();
+				} else if (Date.now() - quietSince >= 5_000) {
+					return;
+				}
+				await new Promise((r) => setTimeout(r, 1_000));
+			}
+		};
+
+		let crawled = 0;
+		let seeds = seedHtml;
+		for (let attempt = 0; ; attempt += 1) {
+			try {
+				crawled = await crawlModuleGraph(seeds);
+				break;
+			} catch (error) {
+				if (error?.stale && attempt < 5) {
+					console.log(
+						"[validate] dependencies re-optimized mid-crawl; waiting for the optimizer to settle, then re-seeding",
+					);
+					await waitForOptimizerQuiescence();
+					seeds = [];
+					for (const route of routes) seeds.push(await (await get(route)).text());
+					continue;
+				}
+				throw error;
+			}
+		}
+		const skipped = crawled - skippedStaleDeps.size;
+		console.log(
+			`[validate] ✓ dev module graph: ${skipped} modules transformed without errors`,
+		);
+		for (const url of skippedStaleDeps) {
+			console.log(
+				`[validate]   · skipped ${url} — pre-bundled by the dep optimizer, so it is ` +
+					"stale until the dev server restarts (upstream Vite/Astro behaviour, not a theme module)",
+			);
+		}
+
+		// The crawl vouches for the modules it fetched; the server log vouches
+		// for everything else that happened while it ran (a module only an
+		// interaction would load, a transform that failed between fetches…).
+		const devErrorRe =
+			/\[ERROR\]|Internal server error|Failed to resolve import|Transform failed|Pre-transform error|Failed to load url/;
+		const loggedErrors = [
+			...new Set(output.split("\n").filter((line) => devErrorRe.test(line))),
+		]
+			.slice(0, 5)
+			.map((line) => `    ${line.trim()}`)
+			.join("\n");
+		if (loggedErrors) {
+			devFail(`dev server logged errors while serving:\n${loggedErrors}`);
+		}
+		console.log("[validate] ✓ dev server log is clean");
 	} finally {
 		await stop();
 	}
