@@ -32,7 +32,7 @@ import {
 	PACKAGE_REPOSITORY,
 	PACKAGE_SRC_EXCLUDES,
 	PACKAGE_VERSION,
-	PEER_DEPENDENCIES,
+	resolvePeerDependencies,
 } from "./config.mjs";
 
 const WORKSPACE_DIR = resolve("workspace");
@@ -250,11 +250,16 @@ for (const [name, range] of Object.entries(EXTRA_DEPENDENCIES)) {
 	dependencies[name] ??= range;
 }
 
+// Peers are keyed to the upstream manifest rather than pinned here, so an
+// upstream bump cannot strand users on a stale version at the project root
+// (see resolvePeerDependencies in config.mjs).
+const peerDependencies = resolvePeerDependencies(upstreamPkg.dependencies);
+
 // Sanity check: warn about bare imports in the shipped source that are not
 // declared anywhere. These become "is not a function" errors for users.
 const declared = new Set([
 	...Object.keys(dependencies),
-	...Object.keys(PEER_DEPENDENCIES),
+	...Object.keys(peerDependencies),
 ]);
 const missing = new Set();
 const IMPORT_RE = /(?:import|export)[\s\S]{0,2000}?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
@@ -456,7 +461,7 @@ const pkg = {
 		"scripts/anime/providers/",
 	],
 	dependencies,
-	peerDependencies: PEER_DEPENDENCIES,
+	peerDependencies,
 	engines: { node: ">=22.12.0" },
 	publishConfig: { access: "public" },
 };

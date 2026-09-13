@@ -139,8 +139,19 @@ export const IGNORED_IMPORTS = new Set([
  *
  * `shirones init` installs all of these automatically, so users still only run
  * one command.
+ *
+ * The ranges below are *fallbacks*. The version actually published comes from
+ * the upstream manifest (see `resolvePeerDependencies`); a literal here is used
+ * only for a package upstream does not declare in `dependencies` — currently
+ * `simple-icons`, which is a devDependency upstream but a runtime import for the
+ * theme.
+ *
+ * Never pin a runtime-critical package here that upstream also declares: the
+ * literal would silently lag behind every upstream bump. That drift is how
+ * `sharp` ended up a minor behind (`^0.34.5` here vs `^0.35.4` upstream) and
+ * users' dev servers failed with `MissingSharp`.
  */
-export const PEER_DEPENDENCIES = {
+export const PEER_DEPENDENCY_FALLBACKS = {
 	astro: "^7.0.0",
 	svelte: "^5.0.0",
 	"@astrojs/svelte": "^9.0.1",
@@ -153,3 +164,56 @@ export const PEER_DEPENDENCIES = {
 	"@iconify-json/fa6-solid": "^1.2.4",
 	"@iconify-json/simple-icons": "^1.2.93",
 };
+
+/**
+ * Peer ranges keyed to the upstream manifest, so an upstream bump flows
+ * through the pipeline instead of stranding users on a stale version.
+ *
+ * A peer range says "your project root must be able to install something the
+ * theme accepts". Because `dependencies` is inherited from upstream verbatim,
+ * the peer has to admit whatever upstream declares — otherwise pnpm refuses to
+ * install the package at all. So the peer follows upstream's floor and widens
+ * an exact pin to its caret line, keeping the peer as broad as the line rather
+ * than pinning it to one version. A package upstream does not declare keeps its
+ * fallback.
+ *
+ * For the ranges currently in play:
+ *
+ * - `sharp` — upstream `^0.35.4` yields `^0.35.4`. The stale `^0.34.5` peer is
+ *   what left users' project roots on the old minor, where Astro's image
+ *   service could not load it and failed with `MissingSharp`.
+ * - `astro` — upstream pin `7.3.2` yields `^7.3.2`, so the peer spans the line
+ *   instead of demanding one exact version.
+ * - `svelte` — upstream `^5.56.8` yields `^5.56.8`.
+ * - `@iconify-json/simple-icons` — absent from upstream's `dependencies`
+ *   (it is a devDependency there, supplied here via `EXTRA_DEPENDENCIES`), so
+ *   it keeps the fallback `^1.2.93`.
+ */
+export function resolvePeerDependencies(upstreamDependencies) {
+	const peers = {};
+	for (const [name, fallback] of Object.entries(PEER_DEPENDENCY_FALLBACKS)) {
+		const upstream = upstreamDependencies?.[name];
+		if (!upstream) {
+			peers[name] = fallback;
+			continue;
+		}
+		// A range with no numeric version at all (`*`, `latest`) is taken
+		// verbatim: there is no floor to widen, and inventing one could exclude
+		// the version `dependencies` would resolve to.
+		const upstreamFloor = rangeFloor(upstream);
+		peers[name] = upstreamFloor ? toCaretRange(upstreamFloor) : upstream;
+	}
+	return peers;
+}
+
+/** Lowest version a range admits, as [major, minor, patch], or null. */
+function rangeFloor(range) {
+	const match = /(\d+)\.(\d+)(?:\.(\d+))?/.exec(range);
+	if (!match) return null;
+	return [Number(match[1]), Number(match[2]), Number(match[3] ?? 0)];
+}
+
+/** Express a floor as a caret range, widening an exact pin to its line. */
+function toCaretRange(floor) {
+	return `^${floor.join(".")}`;
+}

@@ -119,13 +119,23 @@ non-negotiable:
   devDependencies that are imported at runtime are added through
   `EXTRA_DEPENDENCIES` — e.g. `@iconify-json/simple-icons`, which
   `src/plugins/markdown/core/file-tree-icons.mjs` needs.
-- **`PEER_DEPENDENCIES` exist for tools that resolve from the user's project
+- **Peer dependencies exist for tools that resolve from the user's project
   root**, where pnpm's strict layout hides the theme's own copies: `svelte`
   and `@astrojs/svelte` (`@astrojs/svelte` registers `svelte/*` subpaths and
   `@astrojs/svelte/client.js` in `optimizeDeps.include`), `sharp` (Astro's
   image service imports it from the project root), and the `@iconify-json/*`
   sets (astro-icon uses `require.resolve` outside Vite).
   `shirones init` installs them all, so users still run one command.
+  Their ranges are derived from the upstream manifest by
+  `resolvePeerDependencies`, which follows upstream's floor and widens an
+  exact pin to its caret line. This matters because `dependencies` is
+  inherited from upstream verbatim, so a peer that does not admit the declared
+  version makes the package uninstallable under pnpm.
+  `PEER_DEPENDENCY_FALLBACKS` in `scripts/config.mjs` only supplies a range
+  where upstream does not declare the package (`simple-icons`, a
+  devDependency there). Do not pin a runtime-critical package there that
+  upstream also declares — that is how `sharp` drifted a minor behind and
+  users' dev servers failed with `MissingSharp`.
 - A missing `exports` entry surfaces later as an opaque *"X is not a function"*
   in the user's build, so the entries are validated in step 3 rather than
   trusted.
