@@ -29,6 +29,16 @@ or `swup`/`hast`/`mdast`/`unified` which resolve transitively — belong in
 `IGNORED_IMPORTS` in `scripts/config.mjs`, not in `EXTRA_DEPENDENCIES`. Adding a
 non-package alias to `EXTRA_DEPENDENCIES` would publish a broken dependency.
 
+**`pnpm build` fails the same way, but listing a package that only appears in an
+`import type`.** That used to be a false positive: the scanner's regex matched
+`import type { X } from "vite"` like any other import, and `vite` is a peer of
+astro rather than a declared dependency, so the release failed on an import that
+is erased at compile time and can never reach a user's Node process. The regex
+now skips `import type` / `export type` (see the comment on `IMPORT_RE` in
+`scripts/build-package.mjs`). If you see this failure today the import is a real
+one — check that the specifier is not an alias before reaching for
+`EXTRA_DEPENDENCIES`.
+
 **Anime live provider warning during package build.** The optional Bangumi and
 Bilibili providers are shipped under `scripts/anime/providers/` and are only
 loaded when snapshot mode has no local snapshot and `fetchOnDev` is enabled.

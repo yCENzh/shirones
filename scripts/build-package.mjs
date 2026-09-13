@@ -262,7 +262,20 @@ const declared = new Set([
 	...Object.keys(peerDependencies),
 ]);
 const missing = new Set();
-const IMPORT_RE = /(?:import|export)[\s\S]{0,2000}?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
+// `(?!\s+type\b)` skips `import type` / `export type`: those are erased at
+// compile time, so they can never produce an unresolved-import error for a
+// user. Without it, a type-only import of a package that is a peer of astro
+// (`vite`) rather than a declared dependency fails the release on a false
+// positive. Mixed `import { type Foo, bar } from` still matches — it can carry
+// values, and flagging it is the safe direction.
+// `(?!\s+type)` skips `import type` / `export type`: those are erased at
+// compile time, so they can never produce an unresolved-import error for a
+// user. Without it, a type-only import of a package that is a peer of astro
+// (`vite`) rather than a declared dependency fails the release on a false
+// positive. Mixed `import { type Foo, bar } from` still matches — it can carry
+// values, and flagging it is the safe direction.
+const IMPORT_RE =
+	/(?:import|export)(?!\s+type\b)[\s\S]{0,2000}?from\s*["']([^"']+)["']|import\s*\(\s*["']([^"']+)["']\s*\)/g;
 
 async function scanImports(dir) {
 	for (const entry of await readdir(dir, { withFileTypes: true })) {

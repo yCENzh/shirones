@@ -133,11 +133,23 @@ await mkdir(TEMPLATE_DIR, { recursive: true });
 // ── 1. Configuration ────────────────────────────────────────────────────────
 // `index.ts` is the package's barrel and stays package-owned; shipping it to
 // users would let them break the named-export contract the theme relies on.
+//
+// `integrationsConfig.ts` is skipped for the opposite reason: nothing reads it
+// from the user's project. Package mode imports it from `src/config/` at build
+// time, so esbuild inlines it into `dist/index.js` — the copy in
+// `shirones/config/` would be inert. Every other file in this directory *is*
+// live (consumed through the `@/` alias or via `loadConfigModule`), so shipping
+// an editable-looking file that does nothing would be a trap.
 const configCount = await copyWithRewrites(
 	join(WORKSPACE_DIR, "src/config"),
 	join(TEMPLATE_DIR, CONTENT_ROOT, "config"),
 	CONFIG_REWRITES,
-	{ skip: (name) => name === "index.ts" || name === "README.md" },
+	{
+		skip: (name) =>
+			name === "index.ts" ||
+			name === "README.md" ||
+			name === "integrationsConfig.ts",
+	},
 );
 console.log(`[templates] config: ${configCount} files`);
 

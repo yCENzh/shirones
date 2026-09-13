@@ -57,6 +57,18 @@ dist/template/
 └── public/                    favicons and other static assets
 ```
 
+Three files in `src/config/` are deliberately **not** copied, and the reason
+differs for each. `index.ts` is the package's barrel — shipping it would let a
+user break the named-export contract the theme relies on. `README.md` is
+documentation for theme contributors. `integrationsConfig.ts` is skipped because
+nothing in the user's project reads it: package mode imports it from
+`src/config/` at build time, so esbuild inlines it into `dist/index.js` and the
+scaffolded copy would be inert. Every other file in that directory *is* live —
+consumed through the `@/` alias or resolved by `loadConfigModule()` — so shipping
+an editable-looking file that does nothing would be a trap. If the theme ever
+routes integration options through `loadConfigModule()` so users can override
+them, drop it from the `skip` predicate in `prepare-templates.mjs` §1.
+
 The non-obvious work is **import rewriting**. A config module that upstream
 lives at `src/config/musicConfig.ts` reaches its neighbours relatively:
 
