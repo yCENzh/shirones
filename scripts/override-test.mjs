@@ -43,7 +43,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { PACKAGE_NAME } from "./config.mjs";
+import { PACKAGE_NAME, CONTENT_ROOT } from "./config.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST_DIR = join(ROOT, "dist");
@@ -304,14 +304,25 @@ const dist = join(TEST_DIR, "dist");
 	];
 	const manifest = grepUnique(join(TEST_DIR, ".shirones", "loaded"), /(CFG_[A-Za-z0-9]+)/);
 	const missing = LOADED_CONFIG.filter((m) => !manifest.has(`CFG_${m}`));
-	// The scaffolded config surface is every `src/config/*.ts` except
-	// `index.ts` + `README.md` (the templates skip both). Read the expected
-	// count from the manifest so upstream adding/removing a config module
-	// never breaks this test again.
-	const pkgManifest = JSON.parse(
-		readFileSync(join(DIST_DIR, "manifest.json"), "utf8"),
-	);
-	const expectedConfig = pkgManifest.counts.config;
+	// The expected count comes from the built template, not from
+	// `manifest.json`. `manifest.counts.config` counts the theme's
+	// `src/config/*.ts` minus the barrel, but the template skips more than the
+	// barrel: `prepare-templates.mjs` §1 also drops `integrationsConfig.ts`,
+	// which the integration imports statically and esbuild inlines into
+	// `dist/index.js`, so a scaffolded copy would never be read. Deriving the
+	// number from `dist/template/` keeps this assertion true for any skip list
+	// without restating it here — and it is the stronger check, because the
+	// scaffold is produced by `init`, a different code path from `templates`, so
+	// a file dropped between the two still shows up.
+	const expectedConfig = readdirSync(
+		join(DIST_DIR, "template", CONTENT_ROOT, "config"),
+	).filter((f) => f.endsWith(".ts")).length;
+	if (expectedConfig === 0) {
+		console.error(
+			"[override-test] template config directory is empty — `pnpm templates` did not run?",
+		);
+		process.exit(1);
+	}
 	check(injected.size === expectedConfig, `config: all ${expectedConfig} modules injected (got ${injected.size})`);
 	check(missing.length === 0, `config: ${LOADED_CONFIG.length} load-config modules overridden${missing.length ? ` (missing ${missing.join(", ")})` : ""}`);
 	check(grepFiles(dist, "OVR SITE TITLE") > 0, "config: OVR SITE TITLE renders");

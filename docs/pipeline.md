@@ -68,6 +68,9 @@ consumed through the `@/` alias or resolved by `loadConfigModule()` — so shipp
 an editable-looking file that does nothing would be a trap. If the theme ever
 routes integration options through `loadConfigModule()` so users can override
 them, drop it from the `skip` predicate in `prepare-templates.mjs` §1.
+`override-test.mjs` reads its expected config-module count from
+`dist/template/` rather than from `manifest.json`, so changing this skip list
+does not need a matching edit there.
 
 The non-obvious work is **import rewriting**. A config module that upstream
 lives at `src/config/musicConfig.ts` reaches its neighbours relatively:
