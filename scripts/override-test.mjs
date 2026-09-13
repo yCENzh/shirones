@@ -124,10 +124,19 @@ if (!existsSync(join(DIST_DIR, "package.json"))) {
 	process.exit(1);
 }
 
+// Recreate the test project before packing: the tarball lands inside it (see
+// below), and a stale copy from a previous run must not survive.
+rmSync(TEST_DIR, { recursive: true, force: true });
+mkdirSync(TEST_DIR, { recursive: true });
+
 const pkgJson = JSON.parse(readFileSync(join(DIST_DIR, "package.json"), "utf8"));
-const tarball = join(DIST_DIR, `${pkgJson.name.replace("/", "-")}-${pkgJson.version}.tgz`);
-rmSync(tarball, { force: true });
-run("npm", ["pack", DIST_DIR, "--pack-destination", DIST_DIR, "--silent"], ROOT);
+// Pack into the test project, never into `dist/`: the release workflow
+// uploads `dist/` verbatim as its artifact, so a tarball packed there rode
+// along and doubled the download (57 MB → 114 MB) while the published
+// package itself stayed the same size. `validate.mjs` packs into its own
+// throwaway directory for the same reason.
+const tarball = join(TEST_DIR, `${pkgJson.name.replace("/", "-")}-${pkgJson.version}.tgz`);
+run("npm", ["pack", DIST_DIR, "--pack-destination", TEST_DIR, "--silent"], ROOT);
 if (!existsSync(tarball)) {
 	console.error(`[override-test] pack produced no tarball at ${tarball}`);
 	process.exit(1);
@@ -137,8 +146,6 @@ const astroRange = pkgJson.peerDependencies?.astro ?? "^7.0.0";
 
 // ── 1. fresh user project ───────────────────────────────────────────────────
 console.log(`\n[override-test] scaffolding ${TEST_DIR}`);
-rmSync(TEST_DIR, { recursive: true, force: true });
-mkdirSync(TEST_DIR, { recursive: true });
 
 writeFileSync(
 	join(TEST_DIR, "package.json"),
