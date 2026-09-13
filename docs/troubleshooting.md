@@ -214,18 +214,25 @@ differ legitimately — package mode pre-bundles defensively and aliases
 `@iconify/svelte` to the offline build, source mode subsets fonts at build
 time. The sizes are printed so a change in shape is visible in review. Treat a
 size change as a prompt to check both sides by hand, not as a result. Three
-real drifts were found this way and are still open:
+real drifts were found this way; two are now fixed and one is deliberate:
 
-- `sitemap()` — source mode passes `filter: isSitemapPageAllowed`
-  (`src/config/sitemapFilter.ts`); the integration passes nothing, so disabled
-  pages leak into npm users' `sitemap.xml`.
-- `swup().updateHead.persistTags` — source mode carries
-  `:not([data-swup-optional])` selectors, the integration does not, so stale
-  stylesheets persist for npm users.
-- `vite.build.esbuild` — source mode sets `drop: ["debugger"]` and
-  `pure: ["console.log", "console.debug"]`; the integration does not, so npm
-  builds keep their console output.
+- ~~`sitemap()`~~ — **fixed.** The integration now passes the filter, loaded
+  through `loadConfigModule` so a user's own `sitemapFilter` wins. Disabled
+  pages no longer leak into npm users' `sitemap.xml`.
+- ~~`swup().updateHead.persistTags`~~ — **fixed.** Both sides read
+  `swupOptions` from `src/config/integrationsConfig.ts`, which carries the
+  `:not([data-swup-optional])` selectors. Without them the per-page
+  stylesheets the theme marks optional stayed applied after a navigation.
+- `vite.build.esbuild` — **deliberate, stays split.** Source mode sets
+  `drop: ["debugger"]` and `pure: ["console.log", "console.debug"]`; the
+  integration does not. Sharing it would strip `console.log` and `debugger`
+  from a *user's own* code, so `viteBuildShared` omits it and both use sites
+  say why.
 
-All three are symptoms of the duplication itself. Removing it is tracked as the
-single-source config plan; until it lands, keep both sides in sync by hand and
-let this check catch the keys and integration lists.
+The duplication that produced these is gone: both entry points now read
+`src/config/integrationsConfig.ts` for everything that should never have
+differed, so the remaining size differences are the legitimately
+mode-specific ones (aliases, preprocess, `optimizeDeps` filtering, and how
+expressive-code's themes and plugins are resolved). `PACKAGE_ONLY_KEYS` and
+`SOURCE_ONLY_KEYS` are both empty — a key set on one side only is now always a
+bug.

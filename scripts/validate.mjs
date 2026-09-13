@@ -111,7 +111,11 @@ function objectKeys(source, openBrace) {
 		const key = /^([A-Za-z_$][\w$]*)/.exec(source.slice(i));
 		if (!key) continue;
 		// A key follows `{` or `,`; anything else (an operator, a value) does not.
-		if (!/[,{]\s*$/.test(source.slice(Math.max(0, i - 200), i))) continue;
+		// Comments and whitespace between the separator and the key do not count,
+		// and every documented key here has at least one comment above it.
+		if (!/[,{](?:\s|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*$/.test(source.slice(Math.max(0, i - 2000), i))) {
+			continue;
+		}
 		const after = /^\s*[,:}]/.exec(source.slice(i + key[0].length));
 		if (!after) continue;
 		keys.push(key[1]);
@@ -232,10 +236,14 @@ if (!existsSync(SOURCE_CONFIG) || !existsSync(INTEGRATION_SOURCE)) {
 		fail("updateConfig() object is never closed");
 	})();
 
-	// `image` is package-only by design: it hand-supplies the trailing slash on
-	// the image endpoint route that Astro's relative transform would have
-	// appended had `trailingSlash` been set before that transform ran.
-	const PACKAGE_ONLY_KEYS = new Set(["image"]);
+	// Both sets are empty now. `image` used to be package-only — it hand-supplied
+	// the trailing slash on the image endpoint route that Astro's relative
+	// transform would have appended had `trailingSlash` been set before that
+	// transform ran — but both sides now read it from
+	// `src/config/integrationsConfig.ts`, so it is a shared key like any other.
+	// Keeping it listed here would silently permit a future one-sided removal,
+	// which is exactly what this check exists to catch.
+	const PACKAGE_ONLY_KEYS = new Set([]);
 	const SOURCE_ONLY_KEYS = new Set([]);
 
 	const missingInPackage = sourceKeys.filter(

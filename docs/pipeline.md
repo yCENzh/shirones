@@ -145,11 +145,13 @@ non-negotiable:
 The only step that proves the package actually works:
 
 1. Assert the two Astro config entry points have not drifted. The theme is
-   configured twice by hand: `astro.config.mjs` (`defineConfig`, source mode)
-   and `src/integration/index.ts` (`updateConfig` + `createBundledIntegrations`,
-   package mode). Neither imports the other, so a change to one silently skips
-   the other — package mode never reads `astro.config.mjs`, and source mode
-   never runs the integration. The check compares the *shape* only: the set of
+   configured twice: `astro.config.mjs` (`defineConfig`, source mode) and
+   `src/integration/index.ts` (`updateConfig` + `createBundledIntegrations`,
+   package mode). Both now read the shared options from the theme's
+   `src/config/integrationsConfig.ts`, so the duplication that used to drift is
+   gone — but the two declarations still exist, each still sets config keys,
+   and package mode still never reads `astro.config.mjs` while source mode
+   still never runs the integration. The check compares the *shape*: the set of
    config keys each side sets, the `vite` sub-keys each side touches, and the
    integrations each side installs (`EXPECTED_INTEGRATIONS`). The options
    inside those calls are **not** compared — several differ legitimately
