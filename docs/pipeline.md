@@ -159,23 +159,20 @@ non-negotiable:
 
 The only step that proves the package actually works:
 
-1. Assert the two Astro config entry points have not drifted. The theme is
-   configured twice: `astro.config.mjs` (`defineConfig`, source mode) and
-   `src/integration/index.ts` (`updateConfig` + `createBundledIntegrations`,
-   package mode). Both now read the shared options from the theme's
-   `src/config/integrationsConfig.ts`, so the duplication that used to drift is
-   gone — but the two declarations still exist, each still sets config keys,
-   and package mode still never reads `astro.config.mjs` while source mode
-   still never runs the integration. The check compares the *shape*: the set of
-   config keys each side sets, the `vite` sub-keys each side touches, and the
-   integrations each side installs (`EXPECTED_INTEGRATIONS`). The options
-   inside those calls are **not** compared — several differ legitimately
-   (package mode pre-bundles defensively and aliases `@iconify/svelte` to the
-   offline build; source mode subsets fonts at build time) — they are printed
-   as call sizes so a change in shape is visible in the log. Skipped when
-   `workspace/` has not been synced. See
-   [troubleshooting](troubleshooting.md#config-parity) for the drift this
-   catches.
+1. Assert `astro.config.mjs` stays delegation-only. The theme runs the
+   integration in every mode now — the repo's own `astro.config.mjs` is just
+   `integrations: [shirones()]` — so the file must not carry theme config
+   again: option values belong in the theme's
+   `src/config/integrationsConfig.ts` and wiring in
+   `src/integration/index.ts`. The check fails on any `defineConfig` key other
+   than `integrations` and on a missing `shirones()` call. Two further
+   assertions keep the single entry point honest: `updateConfig()` must still
+   set every key every mode needs (`base`, `trailingSlash`, `image`, `fonts`,
+   `integrations`, `markdown`, `vite`), and
+   `createBundledIntegrations()` must still install every integration in
+   `EXPECTED_INTEGRATIONS`. Skipped when `workspace/` has not been synced.
+   See [troubleshooting](troubleshooting.md#config-ownership) for the drift
+   this catches.
 2. `npm pack` the `dist/` directory into a real tarball and assert required
    files are in the packed file list.
 3. Create a scratch project in a temp directory and install that tarball with

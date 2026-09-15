@@ -197,52 +197,48 @@ Three gaps stacked up:
 If a user reports "dev is broken but the deployed site works", reproduce with
 `pnpm validate` in full mode before anything else.
 
-### Config parity
+### Config ownership
 
-**`validate` fails with "astro.config.mjs sets config the integration does not".**
-The theme is configured twice by hand and nothing is shared between the two
-declarations, so one side gets a change and the other does not. Package mode
-never reads `astro.config.mjs` — it reads the integration's `updateConfig()` —
-and source mode never runs the integration. A key present on only one side
-means it silently does not apply in the other mode. Add it to both, or, if it
-genuinely should differ, record it in the `PACKAGE_ONLY_KEYS` /
-`SOURCE_ONLY_KEYS` sets at the top of the check in `scripts/validate.mjs` with
-a comment saying why. `image` is already there: the integration hand-supplies
-the trailing slash on `image.endpoint.route` that Astro's relative transform
-would have appended had `trailingSlash` been set before that transform ran.
+**`validate` fails with "astro.config.mjs owns config keys it must not".**
+The theme runs the integration in every mode now, so `astro.config.mjs` must
+stay a delegation (`integrations: [shirones()]` and nothing else). A key set
+there applies only to the repo's own site and silently drifts away from what
+npm users get. Move option values to the theme's
+`src/config/integrationsConfig.ts` and wiring to
+`src/integration/index.ts`; if a value genuinely is repo-only (there are none
+today), gate it on `paths.isInRepo` inside the integration instead of putting
+it back into the config file.
 
-**`validate` fails with "the two entry points install different integrations".**
-Both sides hand-list the integration set, so an integration added to one is
-missing from the other. Install it on both sides. `EXPECTED_INTEGRATIONS` in
-`scripts/validate.mjs` is the fixed list the check works from; a new
-integration upstream means adding it there too, otherwise the check passes
-without ever looking at it.
+**`validate` fails with "astro.config.mjs does not delegate to shirones()".**
+Someone removed or renamed the integration call; source mode would boot with
+no theme config at all. Restore `integrations: [shirones()]`.
 
-**`validate` reports different integration option sizes but still passes.**
-Intentional. Options inside those calls are not asserted, because several
-differ legitimately — package mode pre-bundles defensively and aliases
-`@iconify/svelte` to the offline build, source mode subsets fonts at build
-time. The sizes are printed so a change in shape is visible in review. Treat a
-size change as a prompt to check both sides by hand, not as a result. Three
-real drifts were found this way; two are now fixed and one is deliberate:
+**`validate` fails with "the integration's updateConfig() no longer sets …".**
+With a single config entry point, one of the keys every mode needs
+(`base`, `trailingSlash`, `image`, `fonts`, `integrations`, `markdown`,
+`vite`) disappeared from `src/integration/index.ts`. `site` is allowed to be
+absent because it is spread in conditionally.
 
-- ~~`sitemap()`~~ — **fixed.** The integration now passes the filter, loaded
-  through `loadConfigModule` so a user's own `sitemapFilter` wins. Disabled
-  pages no longer leak into npm users' `sitemap.xml`.
-- ~~`swup().updateHead.persistTags`~~ — **fixed.** Both sides read
-  `swupOptions` from `src/config/integrationsConfig.ts`, which carries the
-  `:not([data-swup-optional])` selectors. Without them the per-page
-  stylesheets the theme marks optional stayed applied after a navigation.
-- `vite.build.esbuild` — **deliberate, stays split.** Source mode sets
-  `drop: ["debugger"]` and `pure: ["console.log", "console.debug"]`; the
-  integration does not. Sharing it would strip `console.log` and `debugger`
-  from a *user's own* code, so `viteBuildShared` omits it and both use sites
-  say why.
+**`validate` fails with "createBundledIntegrations() no longer installs …".**
+An integration from `EXPECTED_INTEGRATIONS` was dropped or renamed.
+`EXPECTED_INTEGRATIONS` in `scripts/validate.mjs` is a fixed list on purpose —
+a new integration upstream means adding it there too, otherwise the check
+passes without ever looking at it.
 
-The duplication that produced these is gone: both entry points now read
-`src/config/integrationsConfig.ts` for everything that should never have
-differed, so the remaining size differences are the legitimately
-mode-specific ones (aliases, preprocess, `optimizeDeps` filtering, and how
-expressive-code's themes and plugins are resolved). `PACKAGE_ONLY_KEYS` and
-`SOURCE_ONLY_KEYS` are both empty — a key set on one side only is now always a
-bug.
+**Historical note — the old config-parity check.** Until the theme started
+running the integration itself, `astro.config.mjs` and the integration were
+two hand-maintained declarations and `validate` diffed their shapes. Three
+real drifts were found that way; all are now structurally impossible with a
+single entry point:
+
+- ~~`sitemap()` filter~~ — fixed via `loadConfigModule` (`sitemapFilter`).
+- ~~`swup().updateHead.persistTags`~~ — fixed via `swupOptions` in
+  `integrationsConfig.ts`.
+- `vite.build.esbuild` (`drop`/`pure`) — **was never working at all.** Astro 7
+  ships Vite 8, which has no `build.esbuild` key; the old `astro.config.mjs`
+  carried one and Vite silently ignored it, so source-mode builds never
+  actually stripped `console.log`. The integration now puts the transform
+  options on Vite's top-level `esbuild` key, gated to `paths.isInRepo &&
+  command === "build"` so package-mode builds keep user `console.log` output
+  and the dev server stays verbose. See the comment at that use site in
+  `src/integration/index.ts`.
