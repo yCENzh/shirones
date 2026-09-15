@@ -124,44 +124,9 @@ function objectKeys(source, openBrace) {
 	return [...new Set(keys)];
 }
 
-/** The balanced `{ … }` block of the `name:` property inside `parentText`. */
-function childBlock(parentText, name) {
-	const at = new RegExp(`(?:^|[,{])\\s*${name}\\s*:`).exec(parentText);
-	if (!at) return null;
-	const open = parentText.indexOf("{", at.index + at[0].length);
-	if (open === -1) return null;
-	let depth = 0;
-	for (let i = open; i < parentText.length; i += 1) {
-		if (parentText[i] === "{") depth += 1;
-		else if (parentText[i] === "}") {
-			depth -= 1;
-			if (depth === 0) return parentText.slice(open, i + 1);
-		}
-	}
-	return null;
-}
-
-/** The balanced `[ … ]` or `{ … }` block of the `name:` property. */
-function childValue(parentText, name) {
-	const at = new RegExp(`(?:^|[,{])\\s*${name}\\s*:`).exec(parentText);
-	if (!at) return null;
-	const rest = parentText.slice(at.index + at[0].length);
-	const open = rest.search(/[[{]/);
-	if (open === -1) return null;
-	const closer = rest[open] === "[" ? "]" : "}";
-	let depth = 0;
-	for (let i = open; i < rest.length; i += 1) {
-		if (rest[i] === rest[open]) depth += 1;
-		else if (rest[i] === closer) {
-			depth -= 1;
-			if (depth === 0) return rest.slice(open, i + 1);
-		}
-	}
-	return null;
-}
-
 /**
- * The integrations both entry points are expected to install.
+ * The integrations the theme's `createBundledIntegrations()` is expected to
+ * install.
  *
  * Listed explicitly rather than discovered by scanning for `name(`: a scan
  * picks up CSS selectors inside string literals (`:not([data-swup-optional])`
@@ -198,144 +163,88 @@ const INTEGRATION_SOURCE = join(
 );
 
 if (!existsSync(SOURCE_CONFIG) || !existsSync(INTEGRATION_SOURCE)) {
-	console.log("[validate] – skipping config-parity check (workspace not synced)");
+	console.log("[validate] – skipping config-ownership check (workspace not synced)");
 } else {
 	const sourceFile = await readFile(SOURCE_CONFIG, "utf8");
 	const integrationFile = await readFile(INTEGRATION_SOURCE, "utf8");
 
+	// The theme repo now runs the integration itself, so its
+	// `astro.config.mjs` must not carry theme config any more: option values
+	// belong in `src/config/integrationsConfig.ts` and wiring in
+	// `src/integration/index.ts`. A key appearing here would silently apply to
+	// the repo's own site only — exactly the drift the old parity check
+	// existed to catch, so this replaces it.
 	const defineAt = sourceFile.indexOf("export default defineConfig(");
 	if (defineAt === -1) fail("could not locate defineConfig() in astro.config.mjs");
 	const defineOpen = sourceFile.indexOf("{", defineAt);
 	const sourceKeys = objectKeys(sourceFile, defineOpen);
+	const ALLOWED_SOURCE_KEYS = new Set(["integrations"]);
+	const ownedKeys = sourceKeys.filter((key) => !ALLOWED_SOURCE_KEYS.has(key));
+	if (ownedKeys.length > 0) {
+		fail(
+			`astro.config.mjs owns config keys it must not: ${ownedKeys.join(", ")}\n` +
+				"  The integration is the single Astro config entry point for every\n" +
+				"  mode. Move option values to src/config/integrationsConfig.ts and\n" +
+				"  wiring to src/integration/index.ts.",
+		);
+	}
+	if (!/\bshirones\s*\(/.test(sourceFile)) {
+		fail(
+			"astro.config.mjs does not delegate to shirones() — source mode would\n" +
+				"  run without the integration.",
+		);
+	}
+	console.log(
+		`[validate] ✓ astro.config.mjs is delegation-only (${sourceKeys.join(", ")})`,
+	);
 
-	// The whole defineConfig object, as text, for the nested lookups below.
-	const sourceObject = (() => {
-		let depth = 0;
-		for (let i = defineOpen; i < sourceFile.length; i += 1) {
-			if (sourceFile[i] === "{") depth += 1;
-			else if (sourceFile[i] === "}") {
-				depth -= 1;
-				if (depth === 0) return sourceFile.slice(defineOpen, i + 1);
-			}
-		}
-		fail("defineConfig() object is never closed");
-	})();
+	// The integration's updateConfig() must still set everything the theme
+	// needs. `site` is spread in conditionally and therefore not required.
 	const updateAt = integrationFile.indexOf("updateConfig(");
 	if (updateAt === -1) fail("could not locate updateConfig() in the integration");
 	const updateOpen = integrationFile.indexOf("{", updateAt);
 	const packageKeys = objectKeys(integrationFile, updateOpen);
-	const packageObject = (() => {
-		let depth = 0;
-		for (let i = updateOpen; i < integrationFile.length; i += 1) {
-			if (integrationFile[i] === "{") depth += 1;
-			else if (integrationFile[i] === "}") {
-				depth -= 1;
-				if (depth === 0) return integrationFile.slice(updateOpen, i + 1);
-			}
-		}
-		fail("updateConfig() object is never closed");
-	})();
-
-	// Both sets are empty now. `image` used to be package-only — it hand-supplied
-	// the trailing slash on the image endpoint route that Astro's relative
-	// transform would have appended had `trailingSlash` been set before that
-	// transform ran — but both sides now read it from
-	// `src/config/integrationsConfig.ts`, so it is a shared key like any other.
-	// Keeping it listed here would silently permit a future one-sided removal,
-	// which is exactly what this check exists to catch.
-	const PACKAGE_ONLY_KEYS = new Set([]);
-	const SOURCE_ONLY_KEYS = new Set([]);
-
-	const missingInPackage = sourceKeys.filter(
-		(key) => !packageKeys.includes(key) && !SOURCE_ONLY_KEYS.has(key),
-	);
-	const missingInSource = packageKeys.filter(
-		(key) => !sourceKeys.includes(key) && !PACKAGE_ONLY_KEYS.has(key),
-	);
-	if (missingInPackage.length > 0) {
-		fail(
-			`astro.config.mjs sets config the integration does not: ${missingInPackage.join(", ")}\n` +
-				"  Package mode reads the integration's updateConfig(), not astro.config.mjs,\n" +
-				"  so anything set only there never reaches npm users.",
-		);
-	}
-	if (missingInSource.length > 0) {
-		fail(
-			`the integration sets config astro.config.mjs does not: ${missingInSource.join(", ")}\n` +
-				"  Source mode never runs the integration, so anything set only there\n" +
-				"  does not apply to the repo's own site.",
-		);
-	}
-	console.log(
-		`[validate] ✓ config keys match (${sourceKeys.length}: ${sourceKeys.join(", ")})`,
-	);
-
-	const sourceVite = childBlock(sourceObject, "vite");
-	const packageVite = childBlock(packageObject, "vite");
-	if (!sourceVite || !packageVite) fail("could not locate a vite block on both sides");
-	const sourceViteKeys = objectKeys(sourceVite, 0);
-	const packageViteKeys = objectKeys(packageVite, 0);
-	const viteDrift = [
-		...sourceViteKeys.filter((key) => !packageViteKeys.includes(key)),
-		...packageViteKeys.filter((key) => !sourceViteKeys.includes(key)),
+	const REQUIRED_INTEGRATION_KEYS = [
+		"base",
+		"trailingSlash",
+		"image",
+		"fonts",
+		"integrations",
+		"markdown",
+		"vite",
 	];
-	if (viteDrift.length > 0) {
-		fail(`the two entry points touch different vite sub-keys: ${viteDrift.join(", ")}`);
+	const dropped = REQUIRED_INTEGRATION_KEYS.filter(
+		(key) => !packageKeys.includes(key),
+	);
+	if (dropped.length > 0) {
+		fail(
+			`the integration's updateConfig() no longer sets: ${dropped.join(", ")}\n` +
+				"  With a single config entry point, removing one of these breaks\n" +
+				"  every mode at once.",
+		);
 	}
-	console.log(`[validate] ✓ vite sub-keys match (${sourceViteKeys.join(", ")})`);
+	console.log(`[validate] ✓ integration sets (${packageKeys.join(", ")})`);
 
-	const sourceIntegrations = childValue(sourceObject, "integrations");
-	if (!sourceIntegrations) fail("could not locate integrations[] in astro.config.mjs");
-	const bundledAt = integrationFile.indexOf("async function createBundledIntegrations");
+	// With astro.config.mjs reduced to a delegation, every expected
+	// integration must come from createBundledIntegrations(). There is no
+	// second side to diff against any more.
+	const bundledAt = integrationFile.indexOf(
+		"async function createBundledIntegrations",
+	);
 	if (bundledAt === -1) fail("could not locate createBundledIntegrations()");
 	const bundledText = integrationFile.slice(bundledAt);
-
-	const sourceList = integrationsInstalled(sourceIntegrations);
-	const packageList = integrationsInstalled(bundledText);
-	if (sourceList.size === 0) {
-		fail("no known integrations found in astro.config.mjs — is EXPECTED_INTEGRATIONS stale?");
-	}
-	const listDrift = [
-		...[...sourceList].filter((name) => !packageList.has(name)),
-		...[...packageList].filter((name) => !sourceList.has(name)),
-	];
-	if (listDrift.length > 0) {
+	const installed = integrationsInstalled(bundledText);
+	const missingIntegrations = EXPECTED_INTEGRATIONS.filter(
+		(name) => !installed.has(name),
+	);
+	if (missingIntegrations.length > 0) {
 		fail(
-			`the two entry points install different integrations: ${listDrift.join(", ")}\n` +
-				`  source mode:  ${[...sourceList].sort().join(", ")}\n` +
-				`  package mode: ${[...packageList].sort().join(", ")}`,
+			`createBundledIntegrations() no longer installs: ${missingIntegrations.join(", ")}`,
 		);
 	}
 	console.log(
-		`[validate] ✓ integrations match (${[...sourceList].sort().join(", ")})`,
+		`[validate] ✓ bundled integrations (${EXPECTED_INTEGRATIONS.join(", ")})`,
 	);
-
-	// Options are deliberately not asserted. Report their size so a change in
-	// shape is visible in the log; the known real drift is tracked in
-	// docs/pipeline.md.
-	console.log("[validate] – integration options are not compared; call sizes for review:");
-	for (const name of EXPECTED_INTEGRATIONS) {
-		if (name.endsWith("(conditional spread)")) continue;
-		const size = (text) => {
-			const at = new RegExp(`\\b${name}\\s*\\(`).exec(text);
-			if (!at) return "absent";
-			let depth = 0;
-			for (let i = at.index + name.length; i < text.length; i += 1) {
-				if (text[i] === "(") depth += 1;
-				else if (text[i] === ")") {
-					depth -= 1;
-					if (depth === 0) return `${i - (at.index + name.length)} chars`;
-				}
-			}
-			return "unterminated";
-		};
-		const fromSource = size(sourceIntegrations);
-		const fromPackage = size(bundledText);
-		const flag = fromSource === fromPackage ? " " : "≠";
-		console.log(
-			`    ${flag} ${name.padEnd(15)} source: ${String(fromSource).padEnd(11)} package: ${fromPackage}`,
-		);
-	}
 }
 
 console.log("[validate] preparing throwaway project");
