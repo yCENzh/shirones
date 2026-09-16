@@ -50,7 +50,7 @@ Then it produces the tree that `shirones init` copies into a fresh project:
 ```text
 dist/template/
 ├── astro.config.mjs           minimal config: integrations: [shirones()]
-├── src/content.config.ts      three-line collection registration
+├── src/content.config.ts      inline collection schemas (postSchema, momentSchema, specSchema)
 ├── shirones/config/           the theme's src/config/*.ts, verbatim TS
 ├── shirones/config/data/      the theme's src/data/*.ts
 ├── shirones/content/          the example posts and other collections

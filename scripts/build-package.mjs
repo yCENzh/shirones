@@ -216,21 +216,75 @@ export default shirones;
 
 await writeFile(
 	join(DIST_DIR, "collections.d.ts"),
-	`export interface DefineCollectionsOptions {
-  /** Directory holding \`posts/\`, \`moments/\` and \`spec/\`, relative to the project root. */
-  contentDir?: string;
-  paths?: {
-    posts?: string;
-    moments?: string;
-    spec?: string;
-  };
-}
+	`/**
+ * Content collection schemas for Shirone.
+ * Use these with \`defineCollection\` from "astro:content" in your
+ * \`src/content.config.ts\` for full type safety and typegen support.
+ *
+ * Example:
+ * \`\`\`ts
+ * import { defineCollection } from "astro:content";
+ * import { glob } from "astro/loaders";
+ * import { postSchema, momentSchema, specSchema } from "shirones/collections";
+ *
+ * export const collections = {
+ *   posts: defineCollection({
+ *     loader: glob({ base: "./src/content/posts", pattern: "**/*.{md,mdx}" }),
+ *     schema: postSchema,
+ *   }),
+ *   moments: defineCollection({
+ *     loader: glob({ base: "./src/content/moments", pattern: "**/*.md" }),
+ *     schema: momentSchema,
+ *   }),
+ *   spec: defineCollection({
+ *     loader: glob({ base: "./src/content/spec", pattern: "**/*.{md,mdx}" }),
+ *     schema: specSchema,
+ *   }),
+ * } as const;
+ * \`\`\`
+ */
 
-export declare function defineCollections(
-  options?: DefineCollectionsOptions,
-): Record<string, unknown>;
+export const postSchema: import("astro/zod").ZodObject<{
+	title: import("astro/zod").ZodString;
+	published: import("astro/zod").ZodDate;
+	publishedAt: import("astro/zod").ZodOptional<import("astro/zod").ZodDate>;
+	updated: import("astro/zod").ZodOptional<import("astro/zod").ZodDate>;
+	updatedAt: import("astro/zod").ZodOptional<import("astro/zod").ZodDate>;
+	pinned: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
+	draft: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
+	comment: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
+	description: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+	image: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+	tags: import("astro/zod").ZodDefault<import("astro/zod").ZodArray<import("astro/zod").ZodString>>;
+	category: import("astro/zod").ZodDefault<import("astro/zod").ZodNullable<import("astro/zod").ZodString>>;
+	lang: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+	encrypted: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
+	password: import("astro/zod").ZodOptional<import("astro/zod").ZodTransform<import("astro/zod").ZodUnion<[import("astro/zod").ZodString, import("astro/zod").ZodNumber], string>>;
+	passwordHint: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+	hideHomeContent: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
+	alias: import("astro/zod").ZodOptional<import("astro/zod").ZodString>;
+	permalink: import("astro/zod").ZodOptional<import("astro/zod").ZodString>;
+	prevUrl: import("astro/zod").ZodOptional<import("astro/zod").ZodString>;
+	nextUrl: import("astro/zod").ZodOptional<import("astro/zod").ZodString>;
+	prevTitle: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+	prevSlug: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+	nextTitle: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+	nextSlug: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+}>;
 
-export default defineCollections;
+export const momentSchema: import("astro/zod").ZodObject<{
+	published: import("astro/zod").ZodDate;
+	pinned: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
+	location: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+	mood: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
+	tags: import("astro/zod").ZodDefault<import("astro/zod").ZodArray<import("astro/zod").ZodString>>;
+	images: import("astro/zod").ZodOptional<import("astro/zod").ZodDefault<import("astro/zod").ZodArray<import("astro/zod").ZodObject<{ src: import("astro/zod").ZodString; alt: import("astro/zod").ZodDefault<import("astro/zod").ZodString> }>>>;
+	draft: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
+}>;
+
+export const specSchema: import("astro/zod").ZodObject<{}>;
+
+export { postSchema, momentSchema, specSchema };
 `,
 	"utf8",
 );

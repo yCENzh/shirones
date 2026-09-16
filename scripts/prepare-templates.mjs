@@ -225,15 +225,31 @@ await mkdir(join(TEMPLATE_DIR, "src"), { recursive: true });
 
 await writeFile(
 	join(TEMPLATE_DIR, "src/content.config.ts"),
-	`import { defineCollections } from "${PACKAGE_NAME}/collections";
+	`import { defineCollection } from "astro:content";
+import { glob } from "astro/loaders";
+import { postSchema, momentSchema, specSchema } from "shirones/collections";
 
 /**
- * Shirone ships the collection schemas, so this file stays a one-liner.
- * Pass options if you moved the content directory:
- *
- *   defineCollections({ contentDir: "content" })
+ * Shirone content collections — inline schemas for full type safety
+ * and Astro typegen support. Pass custom paths if you moved the content
+ * directory.
  */
-export const collections = defineCollections();
+const posts = defineCollection({
+	loader: glob({ base: "./src/content/posts", pattern: "**/*.{md,mdx}" }),
+	schema: postSchema,
+});
+
+const moments = defineCollection({
+	loader: glob({ base: "./src/content/moments", pattern: "**/*.md" }),
+	schema: momentSchema,
+});
+
+const spec = defineCollection({
+	loader: glob({ base: "./src/content/spec", pattern: "**/*.{md,mdx}" }),
+	schema: specSchema,
+});
+
+export const collections = { posts, moments, spec } as const;
 `,
 	"utf8",
 );
