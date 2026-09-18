@@ -58,12 +58,15 @@ dist/template/
 ```
 
 `shirones/content/` is a plain recursive copy of the theme's `src/content/`
-(§3), so a new collection's *directory* ships with no pipeline change. The
-collection *list*, however, is hard-coded in the generated
-`src/content.config.ts` (§5) — adding a collection upstream means adding a
-matching `defineCollection` there, with `base` under `./${CONTENT_ROOT}/content/`
-and not the theme repo's own `./src/content/`. `validate.mjs` step 4 fails the
-release if any base does not resolve.
+(§3), so a new collection's *directory* ships with no pipeline change. Neither
+does its *declaration*: §5 reads the theme's
+`src/integration/collections.manifest.json` (key, glob pattern, schema export
+name) and generates `src/content.config.ts` from it, rewriting each base to
+`./${CONTENT_ROOT}/content/<key>` — the theme repo's own `./src/content/` would
+be wrong here. The theme's test suite fails if that manifest drifts from its
+`collections.ts` or `content.config.ts`, so **adding a collection upstream needs
+no change in this repository at all.** `validate.mjs` step 4 fails the release
+if any generated base does not resolve.
 
 Three files in `src/config/` are deliberately **not** copied, and the reason
 differs for each. `index.ts` is the package's barrel — shipping it would let a

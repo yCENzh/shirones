@@ -223,35 +223,71 @@ if (existsSync(publicSource)) {
 // ── 5. Astro entry files ────────────────────────────────────────────────────
 await mkdir(join(TEMPLATE_DIR, "src"), { recursive: true });
 
+// The collection list is *read from the theme*, not restated here. The theme
+// owns `src/integration/collections.manifest.json` — key, glob pattern and the
+// schema export name for each collection — and its own test suite fails if that
+// manifest drifts from `collections.ts` or `src/content.config.ts`. So adding a
+// collection upstream needs no change in this repository: the directory ships
+// through the recursive content copy (§3) and the declaration below is
+// generated from the manifest.
+const manifestPath = join(
+	WORKSPACE_DIR,
+	"src/integration/collections.manifest.json",
+);
+if (!existsSync(manifestPath)) {
+	throw new Error(
+		`${manifestPath} is missing — the theme must declare its content ` +
+			"collections there so this template can be generated.",
+	);
+}
+const collections = JSON.parse(await readFile(manifestPath, "utf8"));
+if (!Array.isArray(collections) || collections.length === 0) {
+	// An empty list would generate a content.config.ts with no collections and
+	// read as success everywhere downstream.
+	throw new Error(`${manifestPath} is empty or not a list`);
+}
+for (const entry of collections) {
+	if (!entry?.key || !entry?.pattern || !entry?.schema) {
+		throw new Error(
+			`${manifestPath} has an entry missing key/pattern/schema: ` +
+				JSON.stringify(entry),
+		);
+	}
+}
+
+const collectionBlocks = collections
+	.map(
+		({ key, pattern, schema }) => `const ${key} = defineCollection({
+	loader: glob({ base: "./${CONTENT_ROOT}/content/${key}", pattern: "${pattern}" }),
+	schema: ${schema},
+});`,
+	)
+	.join("\n\n");
+
 await writeFile(
 	join(TEMPLATE_DIR, "src/content.config.ts"),
 	`import { defineCollection } from "astro:content";
 import { glob } from "astro/loaders";
-import { postSchema, momentSchema, specSchema } from "shirones/collections";
+import { ${collections.map((c) => c.schema).join(", ")} } from "${PACKAGE_NAME}/collections";
 
 /**
- * Shirone content collections — inline schemas for full type safety
- * and Astro typegen support. Pass custom paths if you moved the content
- * directory.
+ * Shirone content collections — inline schemas for full type safety and Astro
+ * typegen support (a schema hidden behind a helper call cannot be
+ * introspected). Edit the \`base\` paths if you moved the content directory;
+ * the schemas themselves come from the theme.
+ *
+ * Generated from the theme's \`src/integration/collections.manifest.json\`.
  */
-const posts = defineCollection({
-	loader: glob({ base: "./${CONTENT_ROOT}/content/posts", pattern: "**/*.{md,mdx}" }),
-	schema: postSchema,
-});
+${collectionBlocks}
 
-const moments = defineCollection({
-	loader: glob({ base: "./${CONTENT_ROOT}/content/moments", pattern: "**/*.md" }),
-	schema: momentSchema,
-});
-
-const spec = defineCollection({
-	loader: glob({ base: "./${CONTENT_ROOT}/content/spec", pattern: "**/*.{md,mdx}" }),
-	schema: specSchema,
-});
-
-export const collections = { posts, moments, spec } as const;
+export const collections = { ${collections.map((c) => c.key).join(", ")} } as const;
 `,
 	"utf8",
+);
+console.log(
+	`[templates] content.config.ts: ${collections.length} collections (${collections
+		.map((c) => c.key)
+		.join(", ")})`,
 );
 
 await writeFile(

@@ -105,11 +105,13 @@ and builds the site with that collection silently empty, which is why
 `validate.mjs` now asserts that every base in the scaffolded
 `content.config.ts` resolves to a real directory.
 
-Content directories themselves need no pipeline work: `prepare-templates.mjs` §3
-copies the theme's `src/content/` into the template recursively and
-unconditionally, so a new collection's directory ships as soon as the theme has
-it. What does need updating here is the hard-coded collection list in the
-generated `content.config.ts` (§5).
+Nothing in this repository needs updating for a new collection. §3 copies the
+theme's `src/content/` into the template recursively and unconditionally, so the
+directory ships as soon as the theme has it, and §5 generates the
+`content.config.ts` declarations from the theme's
+`src/integration/collections.manifest.json`. If a collection is missing from a
+user's scaffold, the manifest is the place to look — the theme's own test suite
+asserts it agrees with `collections.ts` and `content.config.ts`.
 
 **A new theme version's per-article features do not appear on existing posts.**
 Astro's content layer caches rendered entries and keys that cache on the
