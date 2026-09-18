@@ -235,17 +235,17 @@ import { postSchema, momentSchema, specSchema } from "shirones/collections";
  * directory.
  */
 const posts = defineCollection({
-	loader: glob({ base: "./src/content/posts", pattern: "**/*.{md,mdx}" }),
+	loader: glob({ base: "./${CONTENT_ROOT}/content/posts", pattern: "**/*.{md,mdx}" }),
 	schema: postSchema,
 });
 
 const moments = defineCollection({
-	loader: glob({ base: "./src/content/moments", pattern: "**/*.md" }),
+	loader: glob({ base: "./${CONTENT_ROOT}/content/moments", pattern: "**/*.md" }),
 	schema: momentSchema,
 });
 
 const spec = defineCollection({
-	loader: glob({ base: "./src/content/spec", pattern: "**/*.{md,mdx}" }),
+	loader: glob({ base: "./${CONTENT_ROOT}/content/spec", pattern: "**/*.{md,mdx}" }),
 	schema: specSchema,
 });
 

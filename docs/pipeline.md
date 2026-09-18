@@ -57,6 +57,14 @@ dist/template/
 └── public/                    favicons and other static assets
 ```
 
+`shirones/content/` is a plain recursive copy of the theme's `src/content/`
+(§3), so a new collection's *directory* ships with no pipeline change. The
+collection *list*, however, is hard-coded in the generated
+`src/content.config.ts` (§5) — adding a collection upstream means adding a
+matching `defineCollection` there, with `base` under `./${CONTENT_ROOT}/content/`
+and not the theme repo's own `./src/content/`. `validate.mjs` step 4 fails the
+release if any base does not resolve.
+
 Three files in `src/config/` are deliberately **not** copied, and the reason
 differs for each. `index.ts` is the package's barrel — shipping it would let a
 user break the named-export contract the theme relies on. `README.md` is
@@ -170,7 +178,10 @@ The only step that proves the package actually works:
    set every key every mode needs (`base`, `trailingSlash`, `image`, `fonts`,
    `integrations`, `markdown`, `vite`), and
    `createBundledIntegrations()` must still install every integration in
-   `EXPECTED_INTEGRATIONS`. Skipped when `workspace/` has not been synced.
+   `EXPECTED_INTEGRATIONS`. The `integrations` key is also asserted
+   *positively*: `defineConfig({})` passes a "no unexpected keys" test while
+   installing nothing at all, and a whole-file regex for `shirones(` is
+   satisfied by a comment. Skipped when `workspace/` has not been synced.
    See [troubleshooting](troubleshooting.md#config-ownership) for the drift
    this catches.
 2. `npm pack` the `dist/` directory into a real tarball and assert required
@@ -179,7 +190,11 @@ The only step that proves the package actually works:
    the real package manager — *not* by copying into `node_modules`, which
    skips lifecycle scripts and dependency resolution and therefore proves
    nothing.
-4. Run `shirones init` in it.
+4. Run `shirones init` in it, then assert the scaffolded
+   `src/content.config.ts` points every `glob({ base })` at a directory that
+   exists. A dangling base only logs
+   `[glob-loader] The base directory … does not exist` and the build succeeds
+   with that collection empty, so nothing downstream notices.
 5. Run `astro build` and assert the expected routes were emitted.
 6. Start `astro dev` and exercise it the way a browser would
    (`checkDevServer`), because dev and build fail in different ways — the

@@ -188,6 +188,17 @@ if (!existsSync(SOURCE_CONFIG) || !existsSync(INTEGRATION_SOURCE)) {
 				"  wiring to src/integration/index.ts.",
 		);
 	}
+	// `ownedKeys` being empty also covers `defineConfig({})`, which would pass
+	// the check above while installing nothing at all. Assert positively that
+	// the delegation is actually there, on the parsed key list rather than on a
+	// whole-file regex — a comment mentioning `shirones()` satisfied that.
+	if (!sourceKeys.includes("integrations")) {
+		fail(
+			"astro.config.mjs does not install the integration: `integrations` is\n" +
+				`  missing from defineConfig() (found: ${sourceKeys.join(", ") || "nothing"}).\n` +
+				"  Source mode would build the site with no theme integration at all.",
+		);
+	}
 	if (!/\bshirones\s*\(/.test(sourceFile)) {
 		fail(
 			"astro.config.mjs does not delegate to shirones() — source mode would\n" +
@@ -367,6 +378,39 @@ for (const relativePath of expected) {
 console.log(`[validate] ✓ scaffold contains ${expected.length} expected entries`);
 if (!(await readFile(join(TEST_DIR, ".gitignore"), "utf8")).includes(".shirones-backup/")) {
 	fail("generated .gitignore does not ignore .shirones-backup/");
+}
+
+// Every collection the scaffolded `content.config.ts` declares must point at a
+// directory that actually exists. A dangling `glob({ base })` does not fail the
+// build — it logs `[glob-loader] The base directory … does not exist` and the
+// site builds with that collection empty, so nothing else in this pipeline
+// notices. This caught the template hard-coding `./src/content/*` (the theme
+// repo's own layout) while `init` scaffolds content to `${CONTENT_ROOT}/content/`.
+{
+	const contentConfig = await readFile(
+		join(TEST_DIR, "src/content.config.ts"),
+		"utf8",
+	);
+	const bases = [...contentConfig.matchAll(/base:\s*["']([^"']+)["']/g)].map(
+		(m) => m[1],
+	);
+	if (bases.length === 0) {
+		fail("scaffolded content.config.ts declares no glob base — nothing to check");
+	}
+	const dangling = bases.filter(
+		(base) => !existsSync(join(TEST_DIR, base.replace(/^\.\//, ""))),
+	);
+	if (dangling.length > 0) {
+		fail(
+			`scaffolded content.config.ts points at ${dangling.length} missing ` +
+				`director${dangling.length === 1 ? "y" : "ies"}: ${dangling.join(", ")}\n` +
+				"  The glob loader warns instead of failing, so the site would build\n" +
+				"  with those collections silently empty.",
+		);
+	}
+	console.log(
+		`[validate] ✓ all ${bases.length} collection bases resolve (${bases.join(", ")})`,
+	);
 }
 
 // `--force` deliberately replaces the scaffold. The safety contract is that

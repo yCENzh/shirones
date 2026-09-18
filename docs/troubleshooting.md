@@ -80,6 +80,37 @@ missing files without replacing existing content.
 
 ## Upgrading the theme
 
+**`defineCollections is not a function` after upgrading.** Breaking change: the
+`shirones/collections` one-liner is gone, because Astro's typegen cannot
+introspect a schema hidden behind a function call — it needs `defineCollection`
+with the schema inline. `init --force` rewrites `src/content.config.ts` for you;
+to migrate by hand, replace
+
+```ts
+import { defineCollections } from "shirones/collections";
+export const collections = defineCollections();
+```
+
+with one `defineCollection` per collection, importing `postSchema`,
+`momentSchema` and `specSchema` (and `seriesSchema` once the series feature
+ships) from `shirones/collections`. Keep the `glob({ base })` paths pointing at
+`./shirones/content/…` — see the next entry.
+
+**`[glob-loader] The base directory "…" does not exist.`** The collection's
+`base` does not match where the content actually is. In a package-mode project
+content lives under `shirones/content/`, so the bases must read
+`./shirones/content/posts` and so on — not `./src/content/posts`, which is the
+*theme repository's* own layout. This is a warning, not an error: Astro logs it
+and builds the site with that collection silently empty, which is why
+`validate.mjs` now asserts that every base in the scaffolded
+`content.config.ts` resolves to a real directory.
+
+Content directories themselves need no pipeline work: `prepare-templates.mjs` §3
+copies the theme's `src/content/` into the template recursively and
+unconditionally, so a new collection's directory ships as soon as the theme has
+it. What does need updating here is the hard-coded collection list in the
+generated `content.config.ts` (§5).
+
 **A new theme version's per-article features do not appear on existing posts.**
 Astro's content layer caches rendered entries and keys that cache on the
 *content*, not on the theme version — and hosts like Vercel restore the cache
