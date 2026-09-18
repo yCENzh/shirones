@@ -50,12 +50,23 @@ Then it produces the tree that `shirones init` copies into a fresh project:
 ```text
 dist/template/
 ├── astro.config.mjs           minimal config: integrations: [shirones()]
-├── src/content.config.ts      three-line collection registration
+├── src/content.config.ts      inline collection schemas (postSchema, momentSchema, specSchema)
 ├── shirones/config/           the theme's src/config/*.ts, verbatim TS
 ├── shirones/config/data/      the theme's src/data/*.ts
 ├── shirones/content/          the example posts and other collections
 └── public/                    favicons and other static assets
 ```
+
+`shirones/content/` is a plain recursive copy of the theme's `src/content/`
+(§3), so a new collection's *directory* ships with no pipeline change. Neither
+does its *declaration*: §5 reads the theme's
+`src/integration/collections.manifest.json` (key, glob pattern, schema export
+name) and generates `src/content.config.ts` from it, rewriting each base to
+`./${CONTENT_ROOT}/content/<key>` — the theme repo's own `./src/content/` would
+be wrong here. The theme's test suite fails if that manifest drifts from its
+`collections.ts` or `content.config.ts`, so **adding a collection upstream needs
+no change in this repository at all.** `validate.mjs` step 4 fails the release
+if any generated base does not resolve.
 
 Three files in `src/config/` are deliberately **not** copied, and the reason
 differs for each. `index.ts` is the package's barrel — shipping it would let a
@@ -159,30 +170,34 @@ non-negotiable:
 
 The only step that proves the package actually works:
 
-1. Assert the two Astro config entry points have not drifted. The theme is
-   configured twice: `astro.config.mjs` (`defineConfig`, source mode) and
-   `src/integration/index.ts` (`updateConfig` + `createBundledIntegrations`,
-   package mode). Both now read the shared options from the theme's
-   `src/config/integrationsConfig.ts`, so the duplication that used to drift is
-   gone — but the two declarations still exist, each still sets config keys,
-   and package mode still never reads `astro.config.mjs` while source mode
-   still never runs the integration. The check compares the *shape*: the set of
-   config keys each side sets, the `vite` sub-keys each side touches, and the
-   integrations each side installs (`EXPECTED_INTEGRATIONS`). The options
-   inside those calls are **not** compared — several differ legitimately
-   (package mode pre-bundles defensively and aliases `@iconify/svelte` to the
-   offline build; source mode subsets fonts at build time) — they are printed
-   as call sizes so a change in shape is visible in the log. Skipped when
-   `workspace/` has not been synced. See
-   [troubleshooting](troubleshooting.md#config-parity) for the drift this
-   catches.
+1. Assert `astro.config.mjs` stays delegation-only. The theme runs the
+   integration in every mode now — the repo's own `astro.config.mjs` is just
+   `integrations: [shirones()]` — so the file must not carry theme config
+   again: option values belong in the theme's
+   `src/config/integrationsConfig.ts` and wiring in
+   `src/integration/index.ts`. The check fails on any `defineConfig` key other
+   than `integrations` and on a missing `shirones()` call. Two further
+   assertions keep the single entry point honest: `updateConfig()` must still
+   set every key every mode needs (`base`, `trailingSlash`, `image`, `fonts`,
+   `integrations`, `markdown`, `vite`), and
+   `createBundledIntegrations()` must still install every integration in
+   `EXPECTED_INTEGRATIONS`. The `integrations` key is also asserted
+   *positively*: `defineConfig({})` passes a "no unexpected keys" test while
+   installing nothing at all, and a whole-file regex for `shirones(` is
+   satisfied by a comment. Skipped when `workspace/` has not been synced.
+   See [troubleshooting](troubleshooting.md#config-ownership) for the drift
+   this catches.
 2. `npm pack` the `dist/` directory into a real tarball and assert required
    files are in the packed file list.
 3. Create a scratch project in a temp directory and install that tarball with
    the real package manager — *not* by copying into `node_modules`, which
    skips lifecycle scripts and dependency resolution and therefore proves
    nothing.
-4. Run `shirones init` in it.
+4. Run `shirones init` in it, then assert the scaffolded
+   `src/content.config.ts` points every `glob({ base })` at a directory that
+   exists. A dangling base only logs
+   `[glob-loader] The base directory … does not exist` and the build succeeds
+   with that collection empty, so nothing downstream notices.
 5. Run `astro build` and assert the expected routes were emitted.
 6. Start `astro dev` and exercise it the way a browser would
    (`checkDevServer`), because dev and build fail in different ways — the

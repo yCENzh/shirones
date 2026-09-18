@@ -41,7 +41,7 @@ another package manager is manual.
 my-blog/
 ├── astro.config.mjs        # the only Astro config
 ├── src/
-│   ├── content.config.ts   # one line: defineCollections()
+│   ├── content.config.ts   # inline collection schemas (postSchema, momentSchema, specSchema)
 │   ├── components/         # drop a file here to override a theme component
 │   └── layouts/            # …same for layouts
 ├── shirones/

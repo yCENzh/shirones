@@ -1,11 +1,24 @@
 # Plan: single-source Astro config
 
-**Status:** plan only — nothing here is implemented.
+**Status:** superseded — see the note below.
 **Applies to:** `yCENzh/Shirone` branch `fix` (at `831707e`), consumed by this
 pipeline.
 **Predecessor:** `3990d1d` added a config-parity assertion to
 `scripts/validate.mjs`. That check catches *shape* drift. This plan removes the
 duplication the check exists to police.
+
+> **Update (feat/source-mode-integration).** §3.2 (`integrationsConfig.ts`) and
+> §4 (`image` leaving `PACKAGE_ONLY_KEYS`) had already shipped when this plan
+> was written; its status line said otherwise. The remaining Recommendation 3 —
+> source mode runs the integration too — is now implemented in
+> `yCENzh/Shirone` branch `feat/source-mode-integration`: the repo's
+> `astro.config.mjs` is `integrations: [shirones()]`, and this repo's validate
+> check was rewritten from config-parity to config-ownership (see
+> `docs/troubleshooting.md#config-ownership`). One premise of Q3 below turned
+> out to be wrong: Astro 7 ships Vite 8, which has no `build.esbuild` key, so
+> the source-mode `drop`/`pure` options in `astro.config.mjs` were silently
+> ignored all along. The integration re-enables them on Vite's top-level
+> `esbuild` key, gated to in-repo builds. The plan text below is kept as-is.
 
 ---
 
