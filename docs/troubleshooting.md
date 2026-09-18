@@ -113,6 +113,13 @@ directory ships as soon as the theme has it, and §5 generates the
 user's scaffold, the manifest is the place to look — the theme's own test suite
 asserts it agrees with `collections.ts` and `content.config.ts`.
 
+A malformed manifest fails loudly instead of quietly generating a
+collection-less `content.config.ts`: `prepare-templates.mjs` throws naming the
+file it could not parse and keeps Node's `SyntaxError` — including the
+character offset — attached as the error's `cause`. That path points into
+`workspace/`, the synced copy of the theme; fix the theme repository and re-run
+rather than editing the copy.
+
 **A new theme version's per-article features do not appear on existing posts.**
 Astro's content layer caches rendered entries and keys that cache on the
 *content*, not on the theme version — and hosts like Vercel restore the cache
