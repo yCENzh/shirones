@@ -240,7 +240,18 @@ if (!existsSync(manifestPath)) {
 			"collections there so this template can be generated.",
 	);
 }
-const collections = JSON.parse(await readFile(manifestPath, "utf8"));
+let collections;
+try {
+	collections = JSON.parse(await readFile(manifestPath, "utf8"));
+} catch (error) {
+	// Node's JSON errors carry the offending offset but not the file, and
+	// this runs inside `pnpm all`, where a bare "Unexpected token" gives no
+	// clue that the upstream manifest is what broke.
+	throw new Error(
+		`Failed to parse ${manifestPath}: ${error.message}`,
+		{ cause: error },
+	);
+}
 if (!Array.isArray(collections) || collections.length === 0) {
 	// An empty list would generate a content.config.ts with no collections and
 	// read as success everywhere downstream.

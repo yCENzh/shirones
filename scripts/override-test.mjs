@@ -299,8 +299,17 @@ const dist = join(TEST_DIR, "dist");
 	// bundle instead of hard-coding it, so upstream adding/removing a
 	// Node-side config load never breaks this assertion.
 	const bundle = readFileSync(join(DIST_DIR, "index.js"), "utf8");
+	// Whitespace-tolerant on purpose: the theme is formatted with Biome, which
+	// wraps a call once it passes the line width, and a pattern anchored to
+	// `loadConfigModule(paths, "` silently matched 2 of the 8 call sites the day
+	// that happened — turning this assertion into a much weaker check without
+	// any failure to announce it.
 	const LOADED_CONFIG = [
-		...new Set([...bundle.matchAll(/loadConfigModule\(paths,\s*"([^"]+)"/g)].map((m) => m[1])),
+		...new Set(
+			[...bundle.matchAll(/loadConfigModule\(\s*paths\s*,\s*"([^"]+)"/g)].map(
+				(m) => m[1],
+			),
+		),
 	];
 	const manifest = grepUnique(join(TEST_DIR, ".shirones", "loaded"), /(CFG_[A-Za-z0-9]+)/);
 	const missing = LOADED_CONFIG.filter((m) => !manifest.has(`CFG_${m}`));

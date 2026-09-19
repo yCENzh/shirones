@@ -113,6 +113,13 @@ directory ships as soon as the theme has it, and §5 generates the
 user's scaffold, the manifest is the place to look — the theme's own test suite
 asserts it agrees with `collections.ts` and `content.config.ts`.
 
+A malformed manifest fails loudly instead of quietly generating a
+collection-less `content.config.ts`: `prepare-templates.mjs` throws naming the
+file it could not parse and keeps Node's `SyntaxError` — including the
+character offset — attached as the error's `cause`. That path points into
+`workspace/`, the synced copy of the theme; fix the theme repository and re-run
+rather than editing the copy.
+
 **A new theme version's per-article features do not appear on existing posts.**
 Astro's content layer caches rendered entries and keys that cache on the
 *content*, not on the theme version — and hosts like Vercel restore the cache
@@ -239,7 +246,7 @@ there applies only to the repo's own site and silently drifts away from what
 npm users get. Move option values to the theme's
 `src/config/integrationsConfig.ts` and wiring to
 `src/integration/index.ts`; if a value genuinely is repo-only (there are none
-today), gate it on `paths.isInRepo` inside the integration instead of putting
+today), gate it on `paths.isThemeRepo` inside the integration instead of putting
 it back into the config file.
 
 **`validate` fails with "astro.config.mjs does not delegate to shirones()".**
@@ -271,7 +278,7 @@ single entry point:
   ships Vite 8, which has no `build.esbuild` key; the old `astro.config.mjs`
   carried one and Vite silently ignored it, so source-mode builds never
   actually stripped `console.log`. The integration now puts the transform
-  options on Vite's top-level `esbuild` key, gated to `paths.isInRepo &&
+  options on Vite's top-level `esbuild` key, gated to `paths.isThemeRepo &&
   command === "build"` so package-mode builds keep user `console.log` output
   and the dev server stays verbose. See the comment at that use site in
   `src/integration/index.ts`.

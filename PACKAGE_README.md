@@ -3,6 +3,11 @@
 An expressive, anime-inspired Astro blog theme built on Material 3 Expressive,
 Astro 7 and Svelte 5 — installable as a single npm package.
 
+**Full documentation: <https://github.com/yCENzh/shirones/wiki>** — this README is
+the short version that ships with the package. The wiki covers the CLI, every
+configuration module, the content collections, component overrides, font
+subsetting, upgrades and troubleshooting.
+
 ## Quick start
 
 No Astro starter and no manual installs — `init` works from a completely empty
