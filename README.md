@@ -6,7 +6,7 @@ from upstream at build time, so the theme has exactly one source of truth.
 
 ## Using the package
 
-**Documentation lives at <https://shirones.wiki.14131413.xyz/>** — installation,
+**Documentation lives at <https://github.com/yCENzh/shirones/wiki>** — installation,
 project layout, configuration, content, component overrides, the CLI and
 troubleshooting.
 

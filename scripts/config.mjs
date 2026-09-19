@@ -48,7 +48,7 @@ export const PACKAGE_AUTHOR = process.env.SHIRONES_PACKAGE_AUTHOR ?? "yCENzh";
  */
 export const PACKAGE_HOMEPAGE =
 	process.env.SHIRONES_PACKAGE_HOMEPAGE ??
-	"https://shirones.wiki.14131413.xyz/";
+	"https://github.com/yCENzh/shirones/wiki";
 
 /**
  * Directory name used inside the *user's* project for content and config.
