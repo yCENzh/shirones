@@ -246,7 +246,7 @@ there applies only to the repo's own site and silently drifts away from what
 npm users get. Move option values to the theme's
 `src/config/integrationsConfig.ts` and wiring to
 `src/integration/index.ts`; if a value genuinely is repo-only (there are none
-today), gate it on `paths.isInRepo` inside the integration instead of putting
+today), gate it on `paths.isThemeRepo` inside the integration instead of putting
 it back into the config file.
 
 **`validate` fails with "astro.config.mjs does not delegate to shirones()".**
@@ -278,7 +278,7 @@ single entry point:
   ships Vite 8, which has no `build.esbuild` key; the old `astro.config.mjs`
   carried one and Vite silently ignored it, so source-mode builds never
   actually stripped `console.log`. The integration now puts the transform
-  options on Vite's top-level `esbuild` key, gated to `paths.isInRepo &&
+  options on Vite's top-level `esbuild` key, gated to `paths.isThemeRepo &&
   command === "build"` so package-mode builds keep user `console.log` output
   and the dev server stays verbose. See the comment at that use site in
   `src/integration/index.ts`.
