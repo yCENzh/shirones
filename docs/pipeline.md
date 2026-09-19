@@ -238,7 +238,7 @@ overridable by env var so CI can pass dispatch inputs straight through:
 | `SHIRONES_PACKAGE_VERSION` | resolved by `version:next` | Exact version to publish |
 | `SHIRONES_PACKAGE_REPOSITORY` | this repository | `repository.url`; provenance cross-checks it |
 | `SHIRONES_PACKAGE_AUTHOR` | `yCENzh` | Published author field |
-| `SHIRONES_PACKAGE_HOMEPAGE` | `<repository>#readme` | npm landing link |
+| `SHIRONES_PACKAGE_HOMEPAGE` | `https://shirones.wiki.14131413.xyz/` | npm landing link |
 | `SHIRONES_VALIDATE_BUILD` | `1` | `0` skips the `astro build`/dev smoke test |
 | `SHIRONES_PM` | `pnpm` | Package manager used inside validation; the package's user-facing `init` contract remains pnpm-only |
 

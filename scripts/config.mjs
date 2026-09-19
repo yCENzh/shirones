@@ -38,9 +38,17 @@ export const PACKAGE_REPOSITORY =
 /** Author recorded in the published package.json. */
 export const PACKAGE_AUTHOR = process.env.SHIRONES_PACKAGE_AUTHOR ?? "yCENzh";
 
-/** Landing page shown on npm. */
+/**
+ * Landing page shown on npm.
+ *
+ * Points at the documentation wiki rather than the repository readme: the
+ * wiki carries the full user guide, while this repository only documents the
+ * publishing pipeline. npm renders `homepage` as the package's "Homepage"
+ * link, so it should send users to the docs, not to build scripts.
+ */
 export const PACKAGE_HOMEPAGE =
-	process.env.SHIRONES_PACKAGE_HOMEPAGE ?? `${PACKAGE_REPOSITORY}#readme`;
+	process.env.SHIRONES_PACKAGE_HOMEPAGE ??
+	"https://shirones.wiki.14131413.xyz/";
 
 /**
  * Directory name used inside the *user's* project for content and config.

@@ -6,6 +6,10 @@ from upstream at build time, so the theme has exactly one source of truth.
 
 ## Using the package
 
+**Documentation lives at <https://shirones.wiki.14131413.xyz/>** — installation,
+project layout, configuration, content, component overrides, the CLI and
+troubleshooting.
+
 The published package is `shirones`. From an empty folder:
 
 ```sh
@@ -17,9 +21,9 @@ No Astro starter or manual dependency install is needed — `init` writes a
 `package.json` and installs `astro` plus the theme's peer dependencies. The
 published package requires Node.js 22.12 or newer and `init` sets up pnpm
 behavior only; npm/yarn users must migrate the generated project themselves.
-See
-[PACKAGE_README.md](PACKAGE_README.md) for the full user guide (it ships with
-the package as its README).
+The wiki above is the full user guide;
+[PACKAGE_README.md](PACKAGE_README.md) is the abridged version that ships
+inside the tarball as the package README.
 
 ```text
 LyraVoid/Shirone (theme + src/integration/)
