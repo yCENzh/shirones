@@ -1,10 +1,11 @@
 # Pipeline
 
-Two side-effect-free unit checks run before the packaging pipeline:
-`pnpm test:version` covers strict release versions, and `pnpm test:templates`
-covers the path-rewrite fixtures. The packaging steps then turn a checkout of
-the theme into a publishable tarball. Each step only reads what the previous
-packaging step produced, so it can be re-run on its own while debugging.
+Three side-effect-free unit checks run before the packaging pipeline:
+`pnpm test:version` covers strict release versions, `pnpm test:templates`
+covers the path-rewrite fixtures, and `pnpm test:collections` validates the
+hand-written collection declaration output. The packaging steps then turn a
+checkout of the theme into a publishable tarball. Each step only reads what the
+previous packaging step produced, so it can be re-run on its own while debugging.
 
 ```text
 LyraVoid/Shirone @ $SHIRONES_UPSTREAM_REF
@@ -122,6 +123,10 @@ Assembles `dist/`:
 - Writes the published `package.json`: name from `PACKAGE_NAME`, release version
   from `SHIRONES_PACKAGE_VERSION`, `exports` map, `bin` for the CLI, Node.js
   `>=22.12.0` engines, and the dependency sets from `scripts/config.mjs`.
+  It deliberately does **not** write an exact `packageManager` pin: pnpm 10/11
+  can try to self-install a pnpm 12 pin through the obsolete
+  `@pnpm/linux-x64` package name, preventing `init` from reaching the dev
+  server. The builder's pnpm version remains in `build-info.json`.
 - Copies `PACKAGE_README.md` in as the npm landing page.
 - Ships the runtime anime providers used by the optional `fetchOnDev` snapshot
   mode; the Bilibili provider resolves writes from the user's project root.

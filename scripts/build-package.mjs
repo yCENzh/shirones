@@ -34,6 +34,7 @@ import {
 	PACKAGE_VERSION,
 	resolvePeerDependencies,
 } from "./config.mjs";
+import { renderCollectionsDts } from "./collections-dts.mjs";
 
 const WORKSPACE_DIR = resolve("workspace");
 const DIST_DIR = resolve("dist");
@@ -216,76 +217,7 @@ export default shirones;
 
 await writeFile(
 	join(DIST_DIR, "collections.d.ts"),
-	`/**
- * Content collection schemas for Shirone.
- * Use these with \`defineCollection\` from "astro:content" in your
- * \`src/content.config.ts\` for full type safety and typegen support.
- *
- * Example:
- * \`\`\`ts
- * import { defineCollection } from "astro:content";
- * import { glob } from "astro/loaders";
- * import { postSchema, momentSchema, specSchema } from "shirones/collections";
- *
- * export const collections = {
- *   posts: defineCollection({
- *     loader: glob({ base: "./src/content/posts", pattern: "**/*.{md,mdx}" }),
- *     schema: postSchema,
- *   }),
- *   moments: defineCollection({
- *     loader: glob({ base: "./src/content/moments", pattern: "**/*.md" }),
- *     schema: momentSchema,
- *   }),
- *   spec: defineCollection({
- *     loader: glob({ base: "./src/content/spec", pattern: "**/*.{md,mdx}" }),
- *     schema: specSchema,
- *   }),
- * } as const;
- * \`\`\`
- */
-
-export const postSchema: import("astro/zod").ZodObject<{
-	title: import("astro/zod").ZodString;
-	published: import("astro/zod").ZodDate;
-	publishedAt: import("astro/zod").ZodOptional<import("astro/zod").ZodDate>;
-	updated: import("astro/zod").ZodOptional<import("astro/zod").ZodDate>;
-	updatedAt: import("astro/zod").ZodOptional<import("astro/zod").ZodDate>;
-	pinned: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
-	draft: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
-	comment: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
-	description: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-	image: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-	tags: import("astro/zod").ZodDefault<import("astro/zod").ZodArray<import("astro/zod").ZodString>>;
-	category: import("astro/zod").ZodDefault<import("astro/zod").ZodNullable<import("astro/zod").ZodString>>;
-	lang: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-	encrypted: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
-	password: import("astro/zod").ZodOptional<import("astro/zod").ZodTransform<import("astro/zod").ZodUnion<[import("astro/zod").ZodString, import("astro/zod").ZodNumber], string>>;
-	passwordHint: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-	hideHomeContent: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
-	alias: import("astro/zod").ZodOptional<import("astro/zod").ZodString>;
-	permalink: import("astro/zod").ZodOptional<import("astro/zod").ZodString>;
-	prevUrl: import("astro/zod").ZodOptional<import("astro/zod").ZodString>;
-	nextUrl: import("astro/zod").ZodOptional<import("astro/zod").ZodString>;
-	prevTitle: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-	prevSlug: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-	nextTitle: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-	nextSlug: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-}>;
-
-export const momentSchema: import("astro/zod").ZodObject<{
-	published: import("astro/zod").ZodDate;
-	pinned: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
-	location: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-	mood: import("astro/zod").ZodDefault<import("astro/zod").ZodString>;
-	tags: import("astro/zod").ZodDefault<import("astro/zod").ZodArray<import("astro/zod").ZodString>>;
-	images: import("astro/zod").ZodOptional<import("astro/zod").ZodDefault<import("astro/zod").ZodArray<import("astro/zod").ZodObject<{ src: import("astro/zod").ZodString; alt: import("astro/zod").ZodDefault<import("astro/zod").ZodString> }>>>;
-	draft: import("astro/zod").ZodDefault<import("astro/zod").ZodBoolean>;
-}>;
-
-export const specSchema: import("astro/zod").ZodObject<{}>;
-
-export { postSchema, momentSchema, specSchema };
-`,
+	renderCollectionsDts(),
 	"utf8",
 );
 console.log("[build] type declarations");
@@ -465,11 +397,12 @@ async function scanLocalImports(dir) {
 const bin = { shirones: "bin/cli.mjs" };
 if (PACKAGE_NAME !== "shirones") bin[PACKAGE_NAME] = "bin/cli.mjs";
 
-// Pin the published package to the pnpm that actually builds it — `init`
-// echoes this into the user's package.json so a fresh project pins the same
-// pnpm the package was built and validated with. Prefer the explicit value,
-// then the package-manager user-agent inherited by `pnpm run`, and finally a
-// direct executable lookup for builds launched outside pnpm.
+// Record the pnpm that built the package in build-info.json below, but do not
+// emit a `packageManager` field in the published package. `init` runs pnpm in
+// the user's project, and an exact pnpm 12 pin makes pnpm 10/11 attempt a
+// self-update through the obsolete `@pnpm/linux-x64` package name. That makes
+// an otherwise valid scaffold fail before the dev server can start. Users may
+// choose their own supported pnpm; the build version remains auditable below.
 function detectPnpmVersion() {
 	const explicit = (process.env.PNPM_VERSION ?? "").trim();
 	if (explicit) return explicit;
@@ -490,7 +423,6 @@ const pkg = {
 	type: "module",
 	description: upstreamPkg.description,
 	license: upstreamPkg.license,
-	...(pnpmVersion ? { packageManager: `pnpm@${pnpmVersion}` } : {}),
 	author: PACKAGE_AUTHOR,
 	homepage: PACKAGE_HOMEPAGE,
 	// The published artefact is built and released from *this* repository, and

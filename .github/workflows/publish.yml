@@ -66,6 +66,8 @@ jobs:
         run: pnpm test:version
       - name: Validate template rewrite rules
         run: pnpm test:templates
+      - name: Validate collection declarations
+        run: pnpm test:collections
       - name: Resolve version
         id: version
         run: node scripts/resolve-version.mjs
