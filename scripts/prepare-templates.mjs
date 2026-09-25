@@ -215,6 +215,21 @@ if (existsSync(contentSource)) {
 
 // ── 4. Static assets ────────────────────────────────────────────────────────
 const publicSource = join(WORKSPACE_DIR, "public");
+const momentThumbnailGenerator = join(
+	WORKSPACE_DIR,
+	"scripts/images/generate-moment-thumbnails.mjs",
+);
+if (existsSync(momentThumbnailGenerator)) {
+	// Package-mode users do not run the upstream `images:generate` script. Run it
+	// while assembling the template so the static thumbnail URLs emitted by the
+	// theme already exist in the published package; do not ship `scripts/` just
+	// to repair this at user runtime.
+	execFileSync("node", [momentThumbnailGenerator], {
+		cwd: WORKSPACE_DIR,
+		stdio: "inherit",
+	});
+	console.log("[templates] moment thumbnails generated");
+}
 if (existsSync(publicSource)) {
 	await cp(publicSource, join(TEMPLATE_DIR, "public"), { recursive: true });
 	console.log("[templates] public: copied");

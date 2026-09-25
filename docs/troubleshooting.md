@@ -64,6 +64,17 @@ and wait for the required age when it is. For a one-off local test only, pass
 `--config.minimumReleaseAge=0`; do not silently commit that override to a user
 project.
 
+**Moments cards request missing `-192.webp`, `-384.webp`, or `-640.webp` files.**
+The package pipeline generates these variants before copying `public/`; users
+should not need the upstream image script. If this happens in a locally built
+package, confirm `sharp` is installed in the pipeline repository and rerun
+`pnpm templates` (not just `pnpm build`).
+
+**`astro check` is unavailable in a freshly initialized project.**
+The generated root project must receive upstream-derived peer ranges for both
+`@astrojs/check` and `typescript`. Rebuild the package after changing the
+upstream manifest; do not add a manually pinned version to the template.
+
 **The theme does not apply at all — a stock Astro welcome page renders.**
 `init` used to leave an existing `astro.config.mjs` untouched. Fixed in 0.0.8:
 `ensureAstroConfig()` checks all five config extensions, skips if the file

@@ -197,6 +197,11 @@ export const PEER_DEPENDENCY_FALLBACKS = {
  *   (it is a devDependency there, supplied here via `EXTRA_DEPENDENCIES`), so
  *   it keeps the fallback `^1.2.93`.
  */
+// These tools are excluded from the published package but are required by the
+// generated project's documented `astro check` command. Their ranges still
+// come from the upstream manifest; they are not hardcoded here.
+const PROJECT_CHECK_DEPENDENCIES = new Set(["@astrojs/check", "typescript"]);
+
 export function resolvePeerDependencies(upstreamDependencies) {
 	const peers = {};
 	for (const [name, fallback] of Object.entries(PEER_DEPENDENCY_FALLBACKS)) {
@@ -208,6 +213,12 @@ export function resolvePeerDependencies(upstreamDependencies) {
 		// A range with no numeric version at all (`*`, `latest`) is taken
 		// verbatim: there is no floor to widen, and inventing one could exclude
 		// the version `dependencies` would resolve to.
+		const upstreamFloor = rangeFloor(upstream);
+		peers[name] = upstreamFloor ? toCaretRange(upstreamFloor) : upstream;
+	}
+	for (const name of PROJECT_CHECK_DEPENDENCIES) {
+		const upstream = upstreamDependencies?.[name];
+		if (!upstream) continue;
 		const upstreamFloor = rangeFloor(upstream);
 		peers[name] = upstreamFloor ? toCaretRange(upstreamFloor) : upstream;
 	}

@@ -18,7 +18,7 @@ dependencies for you. The package requires Node.js 22.12 or newer.
 ```sh
 mkdir my-blog
 cd my-blog
-npx shirones init   # scaffolds everything and installs the dependencies
+npx {{PACKAGE_NAME}} init   # scaffolds everything and installs the dependencies
 pnpm dev
 ```
 
@@ -33,9 +33,9 @@ package managers.
 pnpm 10+ refuses to run a dependency's install script until you approve it, and
 the theme needs two: `sharp` (Astro's image optimisation) and `esbuild` (loading
 your TypeScript config). `init` writes the approval into `pnpm-workspace.yaml`
-before it installs, so the plain `npx shirones init` flow never hits it. You
+before it installs, so the plain `npx {{PACKAGE_NAME}} init` flow never hits it. You
 only see `ERR_PNPM_IGNORED_BUILDS` if you `pnpm add {{PACKAGE_NAME}}` yourself
-*before* running `init` — in that case run `npx shirones init` (which repairs
+*before* running `init` — in that case run `npx {{PACKAGE_NAME}} init` (which repairs
 the approval) followed by `pnpm install`. npm and yarn ignore the pnpm approval
 file, but `init` still only defines pnpm's initialization behavior; migrating to
 another package manager is manual.
@@ -107,10 +107,10 @@ overwrites your files. Use `--update` for safe additions or `--force` for a
 backed-up template replacement:
 
 ```sh
-npx shirones init            # report drift (missing files, stale files, changed fields) — changes nothing
-npx shirones init --update   # restore missing files and refresh the scaffold (config, root files, public assets)
-npx shirones init --force    # replace the template trees after backing up the previous copy
-npx shirones info            # detailed status: Node, package manager, paths, content, inventory and drift
+npx {{PACKAGE_NAME}} init            # report drift (missing files, stale files, changed fields) — changes nothing
+npx {{PACKAGE_NAME}} init --update   # restore missing files and refresh the scaffold (config, root files, public assets)
+npx {{PACKAGE_NAME}} init --force    # replace the template trees after backing up the previous copy
+npx {{PACKAGE_NAME}} info            # detailed status: Node, package manager, paths, content, inventory and drift
 ```
 
 Every CLI command begins with the package-manager contract and a link to the
