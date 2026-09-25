@@ -121,12 +121,11 @@ Assembles `dist/`:
   set (`content`, `integration`) — upstream adding a directory needs no
   pipeline change.
 - Writes the published `package.json`: name from `PACKAGE_NAME`, release version
-  from `SHIRONES_PACKAGE_VERSION`, `exports` map, `bin` for the CLI, Node.js
-  `>=22.12.0` engines, and the dependency sets from `scripts/config.mjs`.
-  It deliberately does **not** write an exact `packageManager` pin: pnpm 10/11
-  can try to self-install a pnpm 12 pin through the obsolete
-  `@pnpm/linux-x64` package name, preventing `init` from reaching the dev
-  server. The builder's pnpm version remains in `build-info.json`.
+  from `SHIRONES_PACKAGE_VERSION`, the exact `packageManager` version used by
+  the builder, `exports` map, `bin` for the CLI, Node.js `>=22.12.0` engines,
+  and the dependency sets from `scripts/config.mjs`. The package CLI routes the
+  pinned pnpm through Corepack, with an `npx pnpm@<version>` fallback, so an old
+  pnpm does not try the obsolete `@pnpm/linux-x64` self-update path.
 - Copies `PACKAGE_README.md` in as the npm landing page.
 - Ships the runtime anime providers used by the optional `fetchOnDev` snapshot
   mode; the Bilibili provider resolves writes from the user's project root.

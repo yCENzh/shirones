@@ -397,12 +397,10 @@ async function scanLocalImports(dir) {
 const bin = { shirones: "bin/cli.mjs" };
 if (PACKAGE_NAME !== "shirones") bin[PACKAGE_NAME] = "bin/cli.mjs";
 
-// Record the pnpm that built the package in build-info.json below, but do not
-// emit a `packageManager` field in the published package. `init` runs pnpm in
-// the user's project, and an exact pnpm 12 pin makes pnpm 10/11 attempt a
-// self-update through the obsolete `@pnpm/linux-x64` package name. That makes
-// an otherwise valid scaffold fail before the dev server can start. Users may
-// choose their own supported pnpm; the build version remains auditable below.
+// Pin the published package to the pnpm that built and validated it. The CLI
+// does not invoke an older pnpm directly: it routes this pin through Corepack,
+// with an npx fallback, because pnpm 10/11's self-updater requests the obsolete
+// `@pnpm/linux-x64` package name for a pnpm 12 pin.
 function detectPnpmVersion() {
 	const explicit = (process.env.PNPM_VERSION ?? "").trim();
 	if (explicit) return explicit;
@@ -423,6 +421,7 @@ const pkg = {
 	type: "module",
 	description: upstreamPkg.description,
 	license: upstreamPkg.license,
+	...(pnpmVersion ? { packageManager: `pnpm@${pnpmVersion}` } : {}),
 	author: PACKAGE_AUTHOR,
 	homepage: PACKAGE_HOMEPAGE,
 	// The published artefact is built and released from *this* repository, and
