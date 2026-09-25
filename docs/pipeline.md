@@ -55,8 +55,13 @@ dist/template/
 ├── shirones/config/           the theme's src/config/*.ts, verbatim TS
 ├── shirones/config/data/      the theme's src/data/*.ts
 ├── shirones/content/          the example posts and other collections
-└── public/                    favicons and other static assets
+└── public/                    favicons, static assets, and generated Moments thumbnails
 ```
+
+Before `public/` is copied, the pipeline runs the upstream Moments thumbnail
+ generator with the pipeline's `sharp` dependency. This is deliberate: package
+ users do not receive the upstream build scripts, while the generated pages
+ reference the 192, 384, and 640 pixel WebP variants at runtime.
 
 `shirones/content/` is a plain recursive copy of the theme's `src/content/`
 (§3), so a new collection's *directory* ships with no pipeline change. Neither
@@ -163,9 +168,12 @@ non-negotiable:
   version makes the package uninstallable under pnpm.
   `PEER_DEPENDENCY_FALLBACKS` in `scripts/config.mjs` only supplies a range
   where upstream does not declare the package (`simple-icons`, a
-  devDependency there). Do not pin a runtime-critical package there that
-  upstream also declares — that is how `sharp` drifted a minor behind and
-  users' dev servers failed with `MissingSharp`.
+  devDependency there). The generated project also receives upstream-derived
+  ranges for `@astrojs/check` and `typescript`, because the documented
+  `astro check` command must work immediately after `shirones init`. Do not pin
+  a runtime-critical package there that upstream also declares — that is how
+  `sharp` drifted a minor behind and users' dev servers failed with
+  `MissingSharp`.
 - A missing `exports` entry surfaces later as an opaque *"X is not a function"*
   in the user's build, so the entries are validated in the `pnpm validate`
   tarball check rather than trusted.
