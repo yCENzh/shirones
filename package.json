@@ -17,13 +17,13 @@
   },
   "dependencies": {
     "esbuild": "^0.28.2",
-    "sharp": "^0.35.4"
+    "sharp": "^0.35.5"
   },
   "devDependencies": {
     "@iconify-json/fa6-brands": "^1.2.6",
     "@iconify-json/fa6-regular": "^1.2.4",
     "@iconify-json/fa6-solid": "^1.2.4",
     "@iconify-json/material-symbols": "^1.2.93",
-    "@iconify-json/simple-icons": "^1.2.97"
+    "@iconify-json/simple-icons": "^1.2.98"
   }
 }
