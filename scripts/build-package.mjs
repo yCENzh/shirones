@@ -122,31 +122,59 @@ console.log("[build] bin/cli.mjs");
 //
 // The script scans src/ for icon usage and reads the icon sets from
 // node_modules/@iconify-json/*/icons.json, so stage the pipeline's own icon
-// sets (devDependencies) into the workspace checkout before running it.
-// Every installed @iconify-json/* set is staged, not a hard-coded list: the
-// upstream generator throws a clear "[local-icons] Missing installed icon
-// set" error if it needs a set the pipeline hasn't installed yet, which is
-// exactly the signal to add it to devDependencies.
-const generateIcons = join(WORKSPACE_DIR, "scripts/icons/generate-local-icons.mjs");
-if (existsSync(generateIcons)) {
-	const iconDir = join(WORKSPACE_DIR, "node_modules", "@iconify-json");
-	const localIconDir = join(resolve("."), "node_modules", "@iconify-json");
-	await mkdir(iconDir, { recursive: true });
-	if (existsSync(localIconDir)) {
-		// pnpm symlinks each direct dependency into node_modules/@iconify-json/<set>,
-		// so `entry` reports isDirectory() === false even though it points at a
-		// directory. Probe icons.json through the link instead of gating on
-		// isDirectory(); existsSync follows symlinks, so this works for both
-		// real directories and pnpm symlinks, and skips stray files.
-		for (const entry of await readdir(localIconDir)) {
-			const srcJson = join(localIconDir, entry, "icons.json");
-			if (!existsSync(srcJson)) continue;
-			await mkdir(join(iconDir, entry), { recursive: true });
-			await cp(srcJson, join(iconDir, entry, "icons.json"));
-		}
-	}
-	execFileSync("node", [generateIcons], { cwd: WORKSPACE_DIR, stdio: "inherit" });
-}
+  // sets (devDependencies) into the workspace checkout before generating.
+  // Every installed @iconify-json/* set is staged, not a hard-coded list: the
+  // generator throws a clear "[local-icons] Missing installed icon set" error if
+  // it needs a set the pipeline hasn't installed yet, which is exactly the
+  // signal to add it to devDependencies.
+  //
+  // The generator is imported from the theme rather than run as a script: it
+  // lives in `src/integration/vite/icon/collections.ts` so that the theme's own
+  // builds and this packaging step cannot drift apart. `Icon.svelte` resolves
+  // `@/generated/local-icon-collections` through the alias into `dist/src/`, so
+  // the file has to exist inside the package before the copy below.
+  const iconCollectionsModule = join(
+  	WORKSPACE_DIR,
+  	"src",
+  	"integration",
+  	"vite",
+  	"icon",
+  	"collections.ts",
+  );
+  if (existsSync(iconCollectionsModule)) {
+  	const iconDir = join(WORKSPACE_DIR, "node_modules", "@iconify-json");
+  	const localIconDir = join(resolve("."), "node_modules", "@iconify-json");
+  	await mkdir(iconDir, { recursive: true });
+  	if (existsSync(localIconDir)) {
+  		// pnpm symlinks each direct dependency into node_modules/@iconify-json/<set>,
+  		// so `entry` reports isDirectory() === false even though it points at a
+  		// directory. Probe icons.json through the link instead of gating on
+  		// isDirectory(); existsSync follows symlinks, so this works for both
+  		// real directories and pnpm symlinks, and skips stray files.
+  		for (const entry of await readdir(localIconDir)) {
+  			const srcJson = join(localIconDir, entry, "icons.json");
+  			if (!existsSync(srcJson)) continue;
+  			await mkdir(join(iconDir, entry), { recursive: true });
+  			await cp(srcJson, join(iconDir, entry, "icons.json"));
+  		}
+  	}
+  	const { generateIconCollections } = await import(
+  		pathToFileURL(iconCollectionsModule).href
+  	);
+  	const count = generateIconCollections({
+  		projectRoot: WORKSPACE_DIR,
+  		roots: [join(WORKSPACE_DIR, "src")],
+  		outputPath: join(
+  			WORKSPACE_DIR,
+  			"src",
+  			"generated",
+  			"local-icon-collections.ts",
+  		),
+  	});
+  	console.log(
+  		`[build] icon collections: ${count} icons from the theme sources`,
+  	);
+  }
 
 // ── 3. Theme source (consumed by Vite, not by Node) ─────────────────────────
 // Ship every top-level src/ directory except the excluded ones, so upstream

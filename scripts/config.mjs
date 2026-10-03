@@ -239,9 +239,9 @@ export const PEER_DEPENDENCY_FALLBACKS = {
 	// project root; pnpm's strict layout hides the copy nested in the theme.
 	sharp: "^0.34.5",
 	"@iconify-json/material-symbols": "^1.2.88",
-	"@iconify-json/fa6-brands": "^1.2.6",
-	"@iconify-json/fa6-regular": "^1.2.4",
-	"@iconify-json/fa6-solid": "^1.2.4",
+	"@iconify-json/fa7-brands": "^1.2.4",
+	
+	"@iconify-json/fa7-solid": "^1.2.5",
 	"@iconify-json/simple-icons": "^1.2.93",
 };
 
