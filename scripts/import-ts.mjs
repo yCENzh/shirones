@@ -14,6 +14,7 @@
  * there. `shards` is emptied by `cleanupTranspiled`.
  */
 
+import { rmSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -21,6 +22,7 @@ import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
 const created = new Set();
+let hooked = false;
 
 /**
  * Transpile `entry` and import it.
@@ -34,6 +36,9 @@ const created = new Set();
  * @returns {Promise<Record<string, unknown>>} the module namespace
  */
 export async function importTypeScript(entry, scratchRoot) {
+	// Armed here rather than in `cleanupTranspiled`: the paths that need this
+	// most are exactly the ones that never reach that call.
+	armCleanup();
 	const parent = resolve(scratchRoot);
 	const outDir = await mkdtemp(join(parent, ".shirones-ts-"));
 	created.add(outDir);
@@ -56,8 +61,38 @@ export async function importTypeScript(entry, scratchRoot) {
 	return import(pathToFileURL(outfile).href);
 }
 
-/** Remove everything {@link importTypeScript} wrote. */
+/**
+ * Remove everything {@link importTypeScript} wrote.
+ *
+ * Also armed as a process hook on first use: the callers invoke this at the
+ * end of a successful run, but a transpile failure, an `import()` rejection or
+ * a throwing generator exits before that point, and the scratch directory
+ * would be left inside the staged workspace. The hook covers those paths
+ * without forcing every caller to wrap its body in `try`/`finally`.
+ */
+function armCleanup() {
+	if (hooked) return;
+	hooked = true;
+	const cleanup = () => {
+		for (const dir of created) {
+			try {
+				rmSync(dir, { recursive: true, force: true });
+			} catch {
+				// The process is on its way out; a failure here changes nothing.
+			}
+		}
+	};
+	process.once("exit", cleanup);
+	for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+		process.once(signal, () => {
+			cleanup();
+			process.exit(1);
+		});
+	}
+}
+
 export async function cleanupTranspiled() {
+	armCleanup();
 	await Promise.all(
 		[...created].map((dir) => rm(dir, { recursive: true, force: true })),
 	);
