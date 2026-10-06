@@ -20,6 +20,7 @@ import { chmod, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/prom
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { build } from "esbuild";
+import { cleanupTranspiled, importTypeScript } from "./import-ts.mjs";
 import {
 	ALIAS_PREFIXES,
 	CONTENT_ROOT,
@@ -158,9 +159,10 @@ console.log("[build] bin/cli.mjs");
   			await cp(srcJson, join(iconDir, entry, "icons.json"));
   		}
   	}
-  	const { generateIconCollections } = await import(
-  		pathToFileURL(iconCollectionsModule).href
-  	);
+	const { generateIconCollections } = await importTypeScript(
+		iconCollectionsModule,
+		WORKSPACE_DIR,
+	);
   	const count = generateIconCollections({
   		projectRoot: WORKSPACE_DIR,
   		roots: [join(WORKSPACE_DIR, "src")],
@@ -685,3 +687,5 @@ try {
 } catch {
 	console.log("[build] done");
 }
+
+await cleanupTranspiled();

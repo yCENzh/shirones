@@ -24,6 +24,7 @@ import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { cleanupTranspiled, importTypeScript } from "./import-ts.mjs";
 import { CONTENT_ROOT, PACKAGE_NAME, UPSTREAM_REF, UPSTREAM_REPO } from "./config.mjs";
 import {
 	CONFIG_REWRITES,
@@ -230,8 +231,9 @@ const thumbnailModule = join(
 	"generate.ts",
 );
 if (existsSync(thumbnailModule)) {
-	const { generateMomentThumbnails } = await import(
-		pathToFileURL(thumbnailModule).href
+	const { generateMomentThumbnails } = await importTypeScript(
+		thumbnailModule,
+		WORKSPACE_DIR,
 	);
 	const result = await generateMomentThumbnails({ projectRoot: WORKSPACE_DIR });
 	console.log(
@@ -451,4 +453,5 @@ documentation for the full configuration reference and component-override rules.
 	"utf8",
 );
 
+await cleanupTranspiled();
 console.log("[templates] done");
