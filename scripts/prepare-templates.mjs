@@ -23,6 +23,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { extname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { cleanupTranspiled, importTypeScript } from "./import-ts.mjs";
 import { CONTENT_ROOT, PACKAGE_NAME, UPSTREAM_REF, UPSTREAM_REPO } from "./config.mjs";
 import {
 	CONFIG_REWRITES,
@@ -215,20 +217,28 @@ if (existsSync(contentSource)) {
 
 // ── 4. Static assets ────────────────────────────────────────────────────────
 const publicSource = join(WORKSPACE_DIR, "public");
-const momentThumbnailGenerator = join(
+// Package-mode users do not regenerate thumbnails themselves, so build them
+// while assembling the template: the static URLs the theme emits must already
+// exist in the published package. Imported from the theme rather than run as a
+// script so this step and the theme's own builds cannot drift apart — it now
+// lives in `src/integration/vite/thumbnails/generate.ts`.
+const thumbnailModule = join(
 	WORKSPACE_DIR,
-	"scripts/images/generate-moment-thumbnails.mjs",
+	"src",
+	"integration",
+	"vite",
+	"thumbnails",
+	"generate.ts",
 );
-if (existsSync(momentThumbnailGenerator)) {
-	// Package-mode users do not run the upstream `images:generate` script. Run it
-	// while assembling the template so the static thumbnail URLs emitted by the
-	// theme already exist in the published package; do not ship `scripts/` just
-	// to repair this at user runtime.
-	execFileSync("node", [momentThumbnailGenerator], {
-		cwd: WORKSPACE_DIR,
-		stdio: "inherit",
-	});
-	console.log("[templates] moment thumbnails generated");
+if (existsSync(thumbnailModule)) {
+	const { generateMomentThumbnails } = await importTypeScript(
+		thumbnailModule,
+		WORKSPACE_DIR,
+	);
+	const result = await generateMomentThumbnails({ projectRoot: WORKSPACE_DIR });
+	console.log(
+		`[templates] moment thumbnails: ${result.generated} generated, ${result.total} images`,
+	);
 }
 if (existsSync(publicSource)) {
 	await cp(publicSource, join(TEMPLATE_DIR, "public"), { recursive: true });
@@ -443,4 +453,5 @@ documentation for the full configuration reference and component-override rules.
 	"utf8",
 );
 
+await cleanupTranspiled();
 console.log("[templates] done");

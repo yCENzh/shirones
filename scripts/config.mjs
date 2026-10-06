@@ -1,3 +1,9 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+/** Where `prepare-templates.mjs` syncs the upstream theme. */
+const WORKSPACE_DIR = resolve("workspace");
+
 /**
  * Shared configuration for the shirones build pipeline.
  *
@@ -85,28 +91,29 @@ export const EXCLUDED_DEPENDENCIES = new Set([
 ]);
 
 /**
- * Dependencies that must ship with the package but are not in the upstream
- * `dependencies` block.
+ * Theme-declared layout knowledge, read from the *upstream* tree once it has
+ * been synced into `workspace/`.
  *
- * `@iconify-json/simple-icons` is the important one: upstream lists it as a
- * devDependency, but `src/plugins/markdown/core/file-tree-icons.mjs` imports it
- * at runtime. In source mode that works because devDependencies are installed;
- * in package mode it would blow up in the user's build. This is exactly the
- * "anything an injected route imports must be a real dependency" rule.
+ * Three things used to be restated here and silently drifted:
+ *   - the path aliases, which the theme also declares in `tsconfig.json` `paths`
+ *   - the Vite aliases `createAliases()` installs, which are in those `paths`
+ *     too but must be classified differently
+ *   - the dependencies that ship with the package without being in the theme's
+ *     `dependencies` (an import satisfied only by a devDependency works in
+ *     source mode and breaks a user's package-mode build)
+ *
+ * `tsconfig.json` remains the source for path aliases because it is the one
+ * place TypeScript itself reads them; a second copy in the manifest could drift
+ * from it silently. The classification that tsconfig cannot express — which
+ * entries are Vite aliases rather than theme paths — comes from the theme's
+ * manifest, so no naming convention is guessed here.
+ *
+ * Falls back to the pre-manifest literals when `workspace/` is absent. This
+ * module is imported by the version/template unit tests and by `validate.mjs`,
+ * which run before — or without — a sync, and `publish.yml`'s `ref` input can
+ * package an upstream branch that predates the manifest.
  */
-export const EXTRA_DEPENDENCIES = {
-	esbuild: "^0.27.0 || ^0.28.0",
-	"@iconify-json/simple-icons": "^1.2.93",
-	// Type-only imports that still need to resolve for `astro check`.
-	"@types/hast": "^3.0.5",
-	"@types/mdast": "^4.0.4",
-};
-
-/**
- * Bare-specifier prefixes that are theme path aliases rather than npm packages.
- * The dependency scanner must not report these as missing.
- */
-export const ALIAS_PREFIXES = [
+const FALLBACK_PATH_ALIASES = [
 	"@/",
 	"@components/",
 	"@utils/",
@@ -115,6 +122,72 @@ export const ALIAS_PREFIXES = [
 	"@constants/",
 	"@assets/",
 ];
+const FALLBACK_VITE_ALIASES = [
+	"@shirone/iconify-offline",
+	"@shirone/iconify-offline-functions",
+];
+const FALLBACK_EXTRA_DEPENDENCIES = {
+	esbuild: "^0.27.0 || ^0.28.0",
+	"@iconify-json/simple-icons": "^1.2.93",
+	// Type-only imports that still need to resolve for `astro check`.
+	"@types/hast": "^3.0.5",
+	"@types/mdast": "^4.0.4",
+};
+
+const THEME_MANIFEST = join(
+	WORKSPACE_DIR,
+	"src",
+	"integration",
+	"package.manifest.json",
+);
+
+function readThemeManifest() {
+	if (!existsSync(THEME_MANIFEST)) return null;
+	try {
+		return JSON.parse(readFileSync(THEME_MANIFEST, "utf8"));
+	} catch (error) {
+		console.warn(`[config] could not parse ${THEME_MANIFEST}: ${error.message}`);
+		return null;
+	}
+}
+
+function readThemePathAliases() {
+	const file = join(WORKSPACE_DIR, "tsconfig.json");
+	if (!existsSync(file)) return null;
+	try {
+		// tsconfig permits comments and trailing commas; strip both rather than
+		// taking a JSONC parser dependency for two lines.
+		const raw = readFileSync(file, "utf8")
+			.replace(/^\s*\/\/.*$/gm, "")
+			.replace(/,(\s*[}\]])/g, "$1");
+		const paths = JSON.parse(raw)?.compilerOptions?.paths;
+		if (!paths || typeof paths !== "object") return null;
+		// Strip a trailing `*` and nothing else: `"@components/*"` becomes the
+		// specifier prefix `"@components/"`, while a key with no wildcard
+		// (`"@shirone/iconify-offline"`) is already the literal alias. Adding a
+		// slash unconditionally would yield `"@//"`.
+		const declared = Object.keys(paths)
+			.map((p) => p.replace(/\*$/, ""))
+			.filter((p) => p.length > 0);
+		return declared.length > 0 ? new Set(declared) : null;
+	} catch {
+		return null;
+	}
+}
+
+const themeManifest = readThemeManifest();
+const themePathAliases = readThemePathAliases();
+
+/** Vite aliases, from the theme. `paths` also lists them; this classifies them. */
+export const INTEGRATION_VITE_ALIASES = themeManifest?.viteAliases ?? FALLBACK_VITE_ALIASES;
+
+/** Theme path aliases, minus the ones the integration installs as Vite aliases. */
+export const ALIAS_PREFIXES = [
+	...(themePathAliases ?? new Set(FALLBACK_PATH_ALIASES)),
+].filter((p) => !INTEGRATION_VITE_ALIASES.includes(p));
+
+export const EXTRA_DEPENDENCIES =
+	themeManifest?.extraDependencies ?? FALLBACK_EXTRA_DEPENDENCIES;
 
 /**
  * Bare specifiers that resolve transitively and need no explicit entry.
@@ -128,8 +201,7 @@ export const IGNORED_IMPORTS = new Set([
 	"hast",
 	"mdast",
 	"unified",
-	"@shirone/iconify-offline",
-	"@shirone/iconify-offline-functions",
+	...INTEGRATION_VITE_ALIASES,
 ]);
 
 /**
@@ -167,9 +239,9 @@ export const PEER_DEPENDENCY_FALLBACKS = {
 	// project root; pnpm's strict layout hides the copy nested in the theme.
 	sharp: "^0.34.5",
 	"@iconify-json/material-symbols": "^1.2.88",
-	"@iconify-json/fa6-brands": "^1.2.6",
-	"@iconify-json/fa6-regular": "^1.2.4",
-	"@iconify-json/fa6-solid": "^1.2.4",
+	"@iconify-json/fa7-brands": "^1.2.4",
+	
+	"@iconify-json/fa7-solid": "^1.2.5",
 	"@iconify-json/simple-icons": "^1.2.93",
 };
 
