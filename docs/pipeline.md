@@ -152,14 +152,12 @@ non-negotiable:
 
 - **Anything an injected route imports must be a real `dependency`.** Upstream
   devDependencies that are imported at runtime are added through
-  `EXTRA_DEPENDENCIES` — e.g. `@iconify-json/simple-icons`, which
-  `src/plugins/markdown/core/file-tree-icons.mjs` needs.
+  `EXTRA_DEPENDENCIES`.
 - **Peer dependencies exist for tools that resolve from the user's project
   root**, where pnpm's strict layout hides the theme's own copies: `svelte`
   and `@astrojs/svelte` (`@astrojs/svelte` registers `svelte/*` subpaths and
-  `@astrojs/svelte/client.js` in `optimizeDeps.include`), `sharp` (Astro's
-  image service imports it from the project root), and the `@iconify-json/*`
-  sets (astro-icon uses `require.resolve` outside Vite).
+  `@astrojs/svelte/client.js` in `optimizeDeps.include`), and `sharp`
+  (Astro's image service imports it from the project root).
   `shirones init` installs them all, so users still run one command.
   Their ranges are derived from the upstream manifest by
   `resolvePeerDependencies`, which follows upstream's floor and widens an
@@ -167,13 +165,20 @@ non-negotiable:
   inherited from upstream verbatim, so a peer that does not admit the declared
   version makes the package uninstallable under pnpm.
   `PEER_DEPENDENCY_FALLBACKS` in `scripts/config.mjs` only supplies a range
-  where upstream does not declare the package (`simple-icons`, a
-  devDependency there). The generated project also receives upstream-derived
-  ranges for `@astrojs/check` and `typescript`, because the documented
-  `astro check` command must work immediately after `shirones init`. Do not pin
-  a runtime-critical package there that upstream also declares — that is how
-  `sharp` drifted a minor behind and users' dev servers failed with
-  `MissingSharp`.
+  where upstream does not declare the package. The generated project also
+  receives upstream-derived ranges for `@astrojs/check` and `typescript`,
+  because the documented `astro check` command must work immediately after
+  `shirones init`. Do not pin a runtime-critical package there that upstream
+  also declares — that is how `sharp` drifted a minor behind and users' dev
+  servers failed with `MissingSharp`.
+
+  The four `@iconify-json/*` sets are **not** peers. They used to be, because
+  `astro-icon` located them by reading the user's `package.json` — a
+  discovery step, not a resolution one, which is why bundling them could not
+  help while that package was in play. Upstream dropped astro-icon and now
+  generates a tree-shaken collection from inside the installed package, so the
+  sets ship as ordinary `dependencies` and a user's `package.json` lists none
+  of them. See `docs/troubleshooting.md`.
 - A missing `exports` entry surfaces later as an opaque *"X is not a function"*
   in the user's build, so the entries are validated in the `pnpm validate`
   tarball check rather than trusted.

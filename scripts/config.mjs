@@ -214,17 +214,19 @@ export const IGNORED_IMPORTS = new Set([
  *   `@astrojs/svelte/client.js` in `optimizeDeps.include` (the hydration
  *   client). Without it at the root, Vite logs "Failed to resolve dependency"
  *   in dev and Svelte islands never hydrate in the browser.
- * - `@iconify-json/*` — astro-icon loads icon sets through `require.resolve`
- *   in Node, outside Vite, so the integration's fallback resolver cannot help.
+ * - `sharp` — Astro's image service imports it dynamically from the project
+ *   root; the theme also marks it an esbuild external so its version-locked
+ *   native bindings are matched to the same copy.
  *
- * `shirones init` installs all of these automatically, so users still only run
- * one command.
- *
- * The ranges below are *fallbacks*. The version actually published comes from
- * the upstream manifest (see `resolvePeerDependencies`); a literal here is used
- * only for a package upstream does not declare in `dependencies` — currently
- * `simple-icons`, which is a devDependency upstream but a runtime import for the
- * theme.
+ * `@iconify-json/*` used to be here. It is *not* a project-root dependency:
+ * astro-icon, which located the sets by reading the user's `package.json`, is
+ * gone — the theme now generates a tree-shaken collection from inside the
+ * installed package (`src/integration/vite/icon/collections.ts`) and renders
+ * through its own `Icon.svelte`. The sets ship as ordinary `dependencies` and
+ * the user declares none of them. See `SHIPPED_BUT_PROJECT_OWNED` if a
+ * regression reintroduces the need, and do not re-add them here on the
+ * assumption that icon data must live at the root: verified otherwise with a
+ * real tarball install (`docs/troubleshooting.md`).
  *
  * Never pin a runtime-critical package here that upstream also declares: the
  * literal would silently lag behind every upstream bump. That drift is how
@@ -238,11 +240,6 @@ export const PEER_DEPENDENCY_FALLBACKS = {
 	// Astro's built-in image service dynamically imports `sharp` from the
 	// project root; pnpm's strict layout hides the copy nested in the theme.
 	sharp: "^0.34.5",
-	"@iconify-json/material-symbols": "^1.2.88",
-	"@iconify-json/fa7-brands": "^1.2.4",
-	
-	"@iconify-json/fa7-solid": "^1.2.5",
-	"@iconify-json/simple-icons": "^1.2.93",
 };
 
 /**
@@ -265,9 +262,6 @@ export const PEER_DEPENDENCY_FALLBACKS = {
  * - `astro` — upstream pin `7.3.2` yields `^7.3.2`, so the peer spans the line
  *   instead of demanding one exact version.
  * - `svelte` — upstream `^5.56.8` yields `^5.56.8`.
- * - `@iconify-json/simple-icons` — absent from upstream's `dependencies`
- *   (it is a devDependency there, supplied here via `EXTRA_DEPENDENCIES`), so
- *   it keeps the fallback `^1.2.93`.
  */
 // These tools are excluded from the published package but are required by the
 // generated project's documented `astro check` command. Their ranges still
