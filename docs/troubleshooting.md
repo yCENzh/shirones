@@ -75,6 +75,37 @@ The generated root project must receive upstream-derived peer ranges for both
 `@astrojs/check` and `typescript`. Rebuild the package after changing the
 upstream manifest; do not add a manually pinned version to the template.
 
+**Icons render as nothing at all in package mode, right after making the
+`@iconify-json/*` sets plain dependencies.**
+`astro-icon` decides which icon sets to load from the *user's* `package.json`,
+not from where the files happen to resolve. Two code paths have to agree, and
+only one of them is about resolution:
+
+- `detectInstalledCollections(root)` in `dist/loaders/loadIconifyCollections.js`
+  reads `<root>/package.json` and collects every `@iconify-json/*` key. That
+  list is the only thing iterated; `include` (which the theme passes, naming all
+  four sets) can *widen* it but never adds to it.
+- `loadCollectionFromFS` then resolves `<set>/icons.json` from `process.cwd()`,
+  which does work transitively under pnpm.
+
+So moving the sets into the theme's `dependencies` makes the files reachable
+while the detection list goes **empty**, and the virtual `astro-icon` module
+exports `{}` — every `<Icon name="material-symbols:home">` throws
+`Unable to locate the "material-symbols" icon set!`. Verified with a real
+tarball install (`file:` dependency, then a fresh `pnpm install`, then calling
+the shipped loader against the scratch project) in 20 minutes of work that
+would otherwise have shipped as a release.
+
+Do **not** "fix" this by demoting the iconify sets from `peerDependencies` to
+`dependencies`. If the theme ever does drop them from the user's project, it has
+to stop relying on astro-icon's auto-detection — the theme already has its own
+`localIconCollections` (`src/generated/local-icon-collections.ts`, built by
+`src/integration/vite/icon/collections.ts` and resolved through
+`createRequire(import.meta.url)`) plus the `@shirone/iconify-offline` component
+that replaces `astro-icon`'s. That path resolves from *inside* the package and
+has no detection gate; migrating the 28 `astro-icon/components` consumers onto
+it is the prerequisite, and a much larger change than a dependency shuffle.
+
 **The theme does not apply at all — a stock Astro welcome page renders.**
 `init` used to leave an existing `astro.config.mjs` untouched. Fixed in 0.0.8:
 `ensureAstroConfig()` checks all five config extensions, skips if the file
