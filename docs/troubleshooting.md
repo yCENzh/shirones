@@ -75,6 +75,51 @@ The generated root project must receive upstream-derived peer ranges for both
 `@astrojs/check` and `typescript`. Rebuild the package after changing the
 upstream manifest; do not add a manually pinned version to the template.
 
+**Icons render as nothing at all in package mode, right after making the
+`@iconify-json/*` sets plain dependencies.** *(Resolved upstream — see the end
+of this entry for what shipped.)*
+`astro-icon` decides which icon sets to load from the *user's* `package.json`,
+not from where the files happen to resolve. Two code paths have to agree, and
+only one of them is about resolution:
+
+- `detectInstalledCollections(root)` in `dist/loaders/loadIconifyCollections.js`
+  reads `<root>/package.json` and collects every `@iconify-json/*` key. That
+  list is the only thing iterated; `include` (which the theme passes, naming all
+  four sets) can *widen* it but never adds to it.
+- `loadCollectionFromFS` then resolves `<set>/icons.json` from `process.cwd()`,
+  which does work transitively under pnpm.
+
+So moving the sets into the theme's `dependencies` makes the files reachable
+while the detection list goes **empty**, and the virtual `astro-icon` module
+exports `{}` — every `<Icon name="material-symbols:home">` throws
+`Unable to locate the "material-symbols" icon set!`. Verified with a real
+tarball install (`file:` dependency, then a fresh `pnpm install`, then calling
+the shipped loader against the scratch project) in 20 minutes of work that
+would otherwise have shipped as a release.
+
+The lesson is the transferable part: **resolving** and **discovering** are
+different questions, and only the consumer's source tells you which one it
+does. A package that resolves fine from inside the theme is still unusable if
+the consumer looks it up in a manifest you do not control. Check which one a
+dependency does before moving it out of `peerDependencies`.
+
+The fix shipped upstream is the larger change this entry predicted: astro-icon
+is gone. The theme generates the collection itself
+(`src/integration/vite/icon/collections.ts`, resolved through
+`createRequire(import.meta.url)` from inside the installed package) and renders
+through its own `Icon.svelte`, including a `local` collection for a project's
+`src/icons/*.svg`. That path has no discovery gate, so the four iconify sets are
+now ordinary `dependencies` and `PEER_DEPENDENCY_FALLBACKS` no longer lists
+them. Measured cost: the whole-site HTML grows 0.65% because astro-icon's
+per-page symbol/`<use>` dedup is lost — a per-page dedup does not survive
+cross-page repetition anyway, so the saving was small.
+
+If a future release needs an icon set the user must install, add it to
+`PEER_DEPENDENCY_FALLBACKS` **and** record which of the two mechanisms requires
+it — the reason string in the theme's `src/integration/verify-peers.ts` is what
+tells a user why their build failed, and it is the only place that distinction
+is documented for them.
+
 **The theme does not apply at all — a stock Astro welcome page renders.**
 `init` used to leave an existing `astro.config.mjs` untouched. Fixed in 0.0.8:
 `ensureAstroConfig()` checks all five config extensions, skips if the file
