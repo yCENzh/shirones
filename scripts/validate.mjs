@@ -275,9 +275,23 @@ if (!existsSync(SOURCE_CONFIG) || !existsSync(INTEGRATION_SOURCE)) {
 	// Matched loosely on purpose: the alias is a regex literal today and a
 	// string tomorrow, and the contract is "the specifier is redirected", not
 	// the spelling of the redirection.
-	if (!/find:[^\n]*@iconify[^\n]*svelte/i.test(integrationFile)) {
+	const iconifyAlias = /find:[^\n]*@iconify[^\n]*svelte[^\n]*\n[^\n]*replacement:[^\n]*/i.exec(
+		integrationFile,
+	);
+	if (!iconifyAlias) {
 		iconProblems.push(
 			"`@iconify/svelte` is not aliased to the theme's Icon component",
+		);
+	} else if (
+		// A redirect to anything else reintroduces the upstream component,
+		// which reads icon data the theme does not publish — the icons would
+		// render blank while the alias is still "present". The path suffix is
+		// matched rather than the filename alone, because `OfflineIcon.svelte`
+		// contains `Icon.svelte` as a substring and would pass that check.
+		!/display\/Icon\.svelte/.test(iconifyAlias[0])
+	) {
+		iconProblems.push(
+			`\`@iconify/svelte\` is redirected somewhere other than the theme's Icon component: ${iconifyAlias[0].trim()}`,
 		);
 	}
 	if (iconProblems.length > 0) {
