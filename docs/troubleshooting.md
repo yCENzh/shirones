@@ -240,6 +240,12 @@ dependency, leaving only `astro*` external, precisely because of this.
 
 ## Validation
 
+**`pnpm test:icons` fails: `workspace/src/integration/index.ts is not synced`.**
+The icon contract suite includes a check against the real synced theme source, so
+it must run after `pnpm templates`. `pnpm all` and the Build & Publish workflow
+sync first; if running the test directly in a fresh clone, run `pnpm templates`
+before `pnpm test:icons`.
+
 **Validation prints repeated `An error happened during full reload` messages after it already reports success.**
 This usually means the `pnpm exec astro dev` launcher exited while its Astro/Vite
 child process kept watching the scratch directory. Removing `.validate/` then

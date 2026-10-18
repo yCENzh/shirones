@@ -14,7 +14,9 @@ Whenever the theme gets updates, the whole release is:
    field at its default → **Run workflow**.
 
 That is it — no version to bump, nothing to push here. The pipeline clones the
-theme itself and picks the next version itself.
+theme itself and picks the next version itself. After syncing the theme it runs
+the icon-contract test before the package build, so that gate always checks the
+same source revision the release will contain.
 
 The runtime is dominated by the override suite's Astro builds; it is not a
 fixed-duration check. The run's summary page reports the published version, the
@@ -100,7 +102,7 @@ memory-hungry (`astro build` in validation needs several GB):
 
 ```bash
 pnpm install --no-lockfile
-pnpm all                       # sync → templates → build → packed validate → overrides
+pnpm all                       # unit checks → sync → icon contract → build → validate → overrides
 pnpm version:next              # what the next version would be, without publishing
 ```
 

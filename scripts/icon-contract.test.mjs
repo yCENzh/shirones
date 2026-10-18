@@ -7,6 +7,7 @@ import { checkIconPipeline } from "./icon-contract.mjs";
 
 const ROOT = fileURLToPath(new URL("..", import.meta.url));
 const WORKSPACE = join(ROOT, "workspace", "src", "integration", "index.ts");
+const PLUGIN_CALL = "shironesIconRegeneration(paths, logger),";
 
 /**
  * A minimal integration source that satisfies the contract. Each case mutates
@@ -47,36 +48,111 @@ test("a plugin call outside vite.plugins[] is reported", () => {
 	// The failure this test exists for: searching from `plugins: [` to the end
 	// of the file accepted a call that is not in the array at all, which leaves
 	// the icons unregenerated with the contract still green.
-	const source = GOOD.replace(
-		"shironesIconRegeneration(paths, logger),",
-		""
-	).replace(
+	const source = GOOD.replace(PLUGIN_CALL, "").replace(
 		"const aliases = [",
 		"const registered = shironesIconRegeneration(paths, logger);\nconst aliases = [",
 	);
-	const problems = checkIconPipeline(source);
-	assert.equal(problems.length, 1);
-	assert.match(problems[0], /never registered in `vite\.plugins\[\]`/);
+	const message = checkIconPipeline(source).join(" ");
+	assert.ok(message.includes("never registered in `vite.plugins[]`"));
+});
+
+test("only the direct updateConfig().vite.plugins[] path satisfies registration", () => {
+	const fakeSources = [
+		`updateConfig({});\nconst outside = { vite: { plugins: [${PLUGIN_CALL}] } };`,
+		`updateConfig({ unrelated: { vite: { plugins: [${PLUGIN_CALL}] } } });`,
+		`updateConfig({ vite: { unrelated: { plugins: [${PLUGIN_CALL}] } } });`,
+	];
+	for (const source of fakeSources) {
+		const problems = checkIconPipeline(source);
+		assert.ok(
+			problems.some((problem) =>
+				/no `vite\.plugins\[\]` array|never registered in `vite\.plugins\[\]`/.test(problem),
+			),
+			source,
+		);
+	}
+});
+
+test("comments, strings, regexes, and templates cannot fake plugin registration", () => {
+	const nonCode = [
+		"/* ] shironesIconRegeneration(paths, logger) */",
+		'"shironesIconRegeneration("',
+		String.raw`/shironesIconRegeneration\(/`,
+		"`] shironesIconRegeneration(paths, logger)`",
+	];
+	for (const fakeCall of nonCode) {
+		const source = GOOD.replace(PLUGIN_CALL, `${fakeCall},`);
+		assert.ok(
+			checkIconPipeline(source)
+				.join(" ")
+				.includes("never registered in `vite.plugins[]`"),
+			fakeCall,
+		);
+	}
+});
+
+test("commented alias text does not satisfy the alias contract", () => {
+	const aliasStart = GOOD.indexOf("\t\tfind:");
+	const aliasEnd = GOOD.indexOf("\n\t},", aliasStart);
+	assert.notEqual(aliasStart, -1);
+	assert.notEqual(aliasEnd, -1);
+	const aliasText = GOOD.slice(aliasStart, aliasEnd);
+	const source = GOOD.replace(aliasText, `/*\n${aliasText}\n*/`);
+	assert.ok(
+		checkIconPipeline(source)
+			.join(" ")
+			.includes("not aliased to the theme's Icon component"),
+	);
+});
+
+test("string literals cannot fake the alias contract", () => {
+	const source = GOOD.replace(
+		/const aliases = \[[\s\S]*?\];/,
+		'const fakeFind = "find: @iconify/svelte";\nconst fakeReplacement = "replacement: display/Icon.svelte";',
+	);
+	assert.ok(
+		checkIconPipeline(source)
+			.join(" ")
+			.includes("not aliased to the theme's Icon component"),
+	);
+});
+
+test("a quoted icon specifier and replacement satisfy the alias contract", () => {
+	const source = GOOD.replace(/find: [^\n]*/, 'find: "@iconify/svelte",').replace(
+		/replacement: [^\n]*/,
+		'replacement: "components/atoms/display/Icon.svelte",',
+	);
+	assert.deepEqual(checkIconPipeline(source), []);
+});
+
+test("an unterminated vite.plugins[] array gets a distinct diagnostic", () => {
+	const source = GOOD.replace("\t\t\t],\n\t\t},", "\t\t\t\n\t\t},");
+	assert.ok(checkIconPipeline(source).join(" ").includes("`vite.plugins[` is never closed"));
 });
 
 test("an empty vite.plugins[] is reported", () => {
-	assert.match(
-		checkIconPipeline(GOOD.replace(/plugins: \[[\s\S]*?\],/, "plugins: [],")).join(" "),
-		/never registered in `vite\.plugins\[\]`/,
+	const source = GOOD.replace(/plugins: \[[\s\S]*?\],/, "plugins: [],");
+	assert.ok(
+		checkIconPipeline(source)
+			.join(" ")
+			.includes("never registered in `vite.plugins[]`"),
 	);
 });
 
 test("no vite.plugins[] at all is reported", () => {
-	assert.match(
-		checkIconPipeline("export default 1;\n").join(" "),
-		/no `vite\.plugins\[\]` array/,
+	assert.ok(
+		checkIconPipeline("export default 1;\n")
+			.join(" ")
+			.includes("no `vite.plugins[]` array"),
 	);
 });
 
 test("an alias with no replacement is reported", () => {
-	assert.match(
-		checkIconPipeline(GOOD.replace(/\t\{\n\t\tfind:[\s\S]*?\n\t\},/, "")).join(" "),
-		/not aliased to the theme's Icon component/,
+	const source = GOOD.replace(/\t\treplacement:[^\n]*\n/, "");
+	assert.ok(
+		checkIconPipeline(source)
+			.join(" ")
+			.includes("not aliased to the theme's Icon component"),
 	);
 });
 
@@ -84,11 +160,12 @@ test("an alias redirected to the upstream component is reported", () => {
 	// `OfflineIcon.svelte` contains `Icon.svelte` as a substring, so the path
 	// suffix is what tells them apart.
 	const source = GOOD.replace(
-		'components/atoms/display/Icon.svelte',
-		'node_modules/@iconify/svelte/dist/OfflineIcon.svelte',
+		"components/atoms/display/Icon.svelte",
+		"node_modules/@iconify/svelte/dist/OfflineIcon.svelte",
 	);
-	const problems = checkIconPipeline(source);
-	assert.equal(problems.length, 1);
-	assert.match(problems[0], /redirected somewhere other than/);
+	assert.ok(
+		checkIconPipeline(source)
+			.join(" ")
+			.includes("redirected somewhere other than"),
+	);
 });
-
