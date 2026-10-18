@@ -18,7 +18,7 @@ import { execFileSync, spawn } from "node:child_process";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { CONTENT_ROOT, PACKAGE_NAME } from "./config.mjs";
 
 const DIST_DIR = resolve("dist");
@@ -304,6 +304,36 @@ if (!existsSync(SOURCE_CONFIG) || !existsSync(INTEGRATION_SOURCE)) {
 		);
 	}
 	console.log("[validate] ✓ icon pipeline (regeneration plugin + @iconify/svelte alias)");
+}
+
+// `bin/cli.mjs` is copied, not bundled, so every relative import it makes must
+// resolve inside the published package. A missing sibling is a crash the user
+// only sees after installing, and no other check here reads the shipped file —
+// the dependency scan covers bare package specifiers only.
+const cliPath = join(DIST_DIR, "bin", "cli.mjs");
+const cliSiblings = [];
+if (existsSync(cliPath)) {
+	const cliSource = await readFile(cliPath, "utf8");
+	for (const match of cliSource.matchAll(/from\s+"(\.{1,2}\/[^"]+\.m?js)"/g)) {
+		const target = resolve(dirname(cliPath), match[1]);
+		const relativeTarget = join(DIST_DIR, relative(DIST_DIR, target));
+		cliSiblings.push(relativeTarget);
+		if (!existsSync(target)) {
+			fail(
+				`bin/cli.mjs imports ${match[1]} but the package does not ship it:\n` +
+					`  expected at ${relativeTarget}\n` +
+					"  cli.mjs is copied, not bundled. Ship every module it imports\n" +
+					"  beside it, or the published `shirones init` fails with ERR_MODULE_NOT_FOUND.",
+			);
+		}
+	}
+}
+if (cliSiblings.length > 0) {
+	console.log(
+		`[validate] ✓ bin/cli.mjs resolves ${cliSiblings.length} sibling module(s) (${cliSiblings
+			.map((file) => relative(DIST_DIR, file))
+			.join(", ")})`,
+	);
 }
 
 console.log("[validate] preparing throwaway project");

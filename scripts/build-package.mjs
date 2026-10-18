@@ -15,7 +15,12 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
+import {
+	existsSync,
+	readdirSync,
+	readFileSync,
+	statSync,
+} from "node:fs";
 import { chmod, cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, extname, join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -38,6 +43,44 @@ import {
 import { renderCollectionsDts } from "./collections-dts.mjs";
 
 const WORKSPACE_DIR = resolve("workspace");
+
+/**
+ * Relative modules `src/integration/**` imports that the shipped
+ * `bin/cli.mjs` therefore needs.
+ *
+ * Derived from the source instead of hardcoded, so adding an import there
+ * cannot be forgotten here — the copy step reads this list and the build fails
+ * loudly if a named file is missing from the theme.
+ */
+function cliSiblings(integrationDir) {
+	const siblings = new Set();
+	const walk = (dir) => {
+		for (const entry of readdirSync(dir, { withFileTypes: true })) {
+			const abs = join(dir, entry.name);
+			if (entry.isDirectory()) {
+				walk(abs);
+				continue;
+			}
+			if (!/\.m?js$/.test(entry.name)) continue;
+			const source = readFileSync(abs, "utf8");
+			for (const match of source.matchAll(
+				/from\s+"(\.{1,2}\/[^"]+\.m?js)"/g,
+			)) {
+				siblings.add(resolve(dirname(abs), match[1]));
+			}
+		}
+	};
+	walk(integrationDir);
+	return [...siblings].map((abs) => relative(integrationDir, abs));
+}
+
+/**
+ * The list build-package.mjs copies next to `bin/cli.mjs`. Computed here so
+ * validate.mjs can assert the same set without re-reading the theme.
+ */
+const CLI_SIBLINGS = cliSiblings(
+	join(WORKSPACE_DIR, "src/integration"),
+).filter((file) => !file.endsWith("cli.mjs"));
 const DIST_DIR = resolve("dist");
 
 const upstreamPkg = JSON.parse(
@@ -112,6 +155,23 @@ await cp(
 );
 await chmod(join(DIST_DIR, "bin/cli.mjs"), 0o755);
 console.log("[build] bin/cli.mjs");
+
+// `cli.mjs` is **copied, not bundled**, so every relative import it makes has to
+// be shipped beside it. `src/integration/` is excluded from `dist/src/`, so a
+// sibling module there resolves to nothing and `shirones init` dies with
+// ERR_MODULE_NOT_FOUND in the user's install. Keep the list in step with the
+// theme's imports; validate.mjs asserts these files exist so a new one cannot
+// slip through silently.
+for (const sibling of CLI_SIBLINGS) {
+	const from = join(WORKSPACE_DIR, "src/integration", sibling);
+	if (!existsSync(from)) {
+		console.error(
+			`[build] ✗ cli.mjs imports ${sibling} but the theme does not ship it`,
+		);
+		process.exit(1);
+	}
+	await cp(from, join(DIST_DIR, "bin", sibling));
+}
 
 // ── 2.5. Generate the local icon collection ────────────────────────────────
 // Upstream gitignores src/generated/local-icon-collections.ts and produces it
