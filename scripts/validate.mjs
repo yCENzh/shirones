@@ -269,8 +269,19 @@ if (!existsSync(SOURCE_CONFIG) || !existsSync(INTEGRATION_SOURCE)) {
 	// shows up above — but losing either one breaks every icon in every mode,
 	// which is what an asserted contract is for.
 	const iconProblems = [];
-	if (!/shironesIconRegeneration\s*\(/.test(integrationFile)) {
-		iconProblems.push("the icon regeneration plugin is never registered");
+	// Registered, not merely called: a factory imported and never put in
+	// `vite.plugins[]` produces no output, and the icons would silently stop
+	// regenerating. Both facts are asserted so the plugin's presence in the
+	// array is what the check actually sees.
+	const viteAt = integrationFile.indexOf("vite: {");
+	const pluginsAt = integrationFile.indexOf("plugins: [", viteAt);
+	const hasPluginArray = viteAt !== -1 && pluginsAt !== -1 && pluginsAt > viteAt;
+	if (!hasPluginArray) {
+		iconProblems.push("updateConfig() sets no `vite.plugins[]` array");
+	} else if (!/shironesIconRegeneration\s*\(/.test(integrationFile.slice(pluginsAt))) {
+		iconProblems.push(
+			"the icon regeneration plugin is never registered in `vite.plugins[]`",
+		);
 	}
 	// Matched loosely on purpose: the alias is a regex literal today and a
 	// string tomorrow, and the contract is "the specifier is redirected", not
