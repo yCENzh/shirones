@@ -73,6 +73,8 @@ jobs:
         run: node scripts/resolve-version.mjs
       - name: Sync upstream and prepare user templates
         run: pnpm templates
+      - name: Validate icon pipeline contract
+        run: pnpm test:icons
       - name: Build package and manifest
         run: pnpm build
       - parallel:

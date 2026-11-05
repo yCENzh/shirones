@@ -1,11 +1,13 @@
 # Pipeline
 
-Three side-effect-free unit checks run before the packaging pipeline:
+Three side-effect-free unit checks run before the theme is synced:
 `pnpm test:version` covers strict release versions, `pnpm test:templates`
 covers the path-rewrite fixtures, and `pnpm test:collections` validates the
-hand-written collection declaration output. The packaging steps then turn a
-checkout of the theme into a publishable tarball. Each step only reads what the
-previous packaging step produced, so it can be re-run on its own while debugging.
+hand-written collection declaration output. After `pnpm templates` creates
+`workspace/`, `pnpm test:icons` checks the synced integration's icon plugin and
+alias contract. The packaging steps then turn a checkout of the theme into a
+publishable tarball. Each step only reads what the previous packaging step
+produced, so it can be re-run on its own while debugging.
 
 ```text
 LyraVoid/Shirone @ $SHIRONES_UPSTREAM_REF
@@ -13,6 +15,8 @@ LyraVoid/Shirone @ $SHIRONES_UPSTREAM_REF
    0. version:next → the version to publish (patch bump, or an explicit request)
         │
    1. templates    → workspace/ + dist/template/   sync checkout; what `shirones init` copies
+        │
+   1a. test:icons  → synced workspace             icon plugin + alias contract
         │
    2. build        → dist/ + manifest.json         the tarball: integration + src/ + package.json
         │
@@ -117,6 +121,16 @@ resolves paths against the *project* root, not the package:
 Configs stay **TypeScript**, importing their types from the package, so users
 keep full autocomplete and the field set matches the theme exactly.
 
+## After sync: `pnpm test:icons` — `scripts/icon-contract.test.mjs`
+
+This suite reads the real `workspace/src/integration/index.ts` as well as using
+small fixtures. It verifies that the regeneration factory is executable code
+inside the `updateConfig().vite.plugins[]` array and that `@iconify/svelte` is
+redirected to the theme's own `Icon.svelte`. Comments, string/template literals,
+and regexes do not count as registrations. Run it after `pnpm templates`; the
+`pnpm all` script and Build & Publish workflow do so in that order. A direct
+`pnpm test:icons` before sync fails with an explicit missing-workspace message.
+
 ## 2. `pnpm build` — `scripts/build-package.mjs`
 
 Assembles `dist/`:
@@ -198,12 +212,15 @@ The only step that proves the package actually works:
    set every key every mode needs (`base`, `trailingSlash`, `image`, `fonts`,
    `integrations`, `markdown`, `vite`), and
    `createBundledIntegrations()` must still install every integration in
-   `EXPECTED_INTEGRATIONS`. The `integrations` key is also asserted
-   *positively*: `defineConfig({})` passes a "no unexpected keys" test while
-   installing nothing at all, and a whole-file regex for `shirones(` is
-   satisfied by a comment. Skipped when `workspace/` has not been synced.
-   See [troubleshooting](troubleshooting.md#config-ownership) for the drift
-   this catches.
+   `EXPECTED_INTEGRATIONS`. The synced-source preflight also checks that the
+   icon regeneration factory appears as executable code inside
+   `updateConfig().vite.plugins[]` and that `@iconify/svelte` redirects to the
+   theme's `Icon.svelte`; `pnpm test:icons` covers those contracts with fixtures.
+   The `integrations` key is also asserted *positively*: `defineConfig({})`
+   passes a "no unexpected keys" test while installing nothing at all, and a
+   whole-file regex for `shirones(` is satisfied by a comment. Skipped when
+   `workspace/` has not been synced. See
+   [troubleshooting](troubleshooting.md#config-ownership) for the drift this catches.
 2. `npm pack` the `dist/` directory into a real tarball and assert required
    files are in the packed file list.
 3. Create a scratch project in a temp directory and install that tarball with
