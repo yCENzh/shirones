@@ -21,6 +21,7 @@
 | Upstream repo/ref, package name, excluded deps | `scripts/config.mjs` |
 | Version selection | `scripts/resolve-version.mjs` |
 | Upstream sync + import rewriting for the user-facing template | `scripts/prepare-templates.mjs` |
+| Narrow build-time adaptations to generated upstream source | `scripts/upstream-patches.mjs` + `scripts/upstream-patches.test.mjs` |
 | Bundling + `package.json` + route/override manifest | `scripts/build-package.mjs` |
 | End-to-end install test | `scripts/validate.mjs` |
 | Build & publish | `.github/workflows/publish.yml` |
@@ -47,9 +48,11 @@ Publishing remains manual-only — `.github/workflows/publish.yml` has no push o
 pull-request trigger, so editing this repository never publishes. The same
 manual workflow performs the build, packed-package validation and override test
 before its final upload/publish parallel group. It uses `pnpm/setup@v2` (not
-`pnpm/action-setup`) with the current Node LTS; the package still requires
-Node `>=22.12.0`. The publish step installs npm globally
-(`pnpm add -g npm`) and writes the auth `.npmrc` from `NPM_TOKEN`.
+`pnpm/action-setup`) with the current Node LTS. The package inherits
+`engines.node` from the selected upstream ref (currently `>=26.13.0`; older
+refs without an engine declaration retain the `>=22.12.0` fallback). The publish
+step installs npm globally (`pnpm add -g npm`) and writes the auth `.npmrc` from
+`NPM_TOKEN`.
 
 The published version is **not** the theme's version: `resolve-version.mjs`
 patch-bumps the latest release on npm, or takes the workflow's version input,
@@ -69,7 +72,8 @@ discovery.
 pnpm install
 pnpm templates
 pnpm build
-SHIRONES_VALIDATE_BUILD=0 pnpm validate   # full build needs ~4 GB RAM
+SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD=1 pnpm validate  # skip static build; dev smoke still runs
+SHIRONES_VALIDATE_BUILD=0 pnpm validate                  # lifecycle/init checks only
 SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test
 ```
 

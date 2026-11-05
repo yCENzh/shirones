@@ -266,6 +266,19 @@ Almost always because the package was tested by copying `dist/` into
 `node_modules/<pkg>` instead of installing a packed tarball. That skips
 lifecycle scripts and real dependency resolution. Always `npm pack` + install.
 
+**`astro dev` returns 500 from `@material/material-color-utilities/dynamiccolor/color_spec_2025.js`.**
+This is an SSR bundling configuration issue, not a Node-engine mismatch. The
+upstream integration revision used for the failing build put `noExternal` under
+`vite.resolve`, where Vite does not read it; the option belongs under
+`vite.ssr.noExternal`. `scripts/build-package.mjs` applies the narrow,
+idempotent correction to the generated `workspace/` copy before bundling, and
+`scripts/upstream-patches.test.mjs` covers both the misplaced and already-fixed
+upstream shapes. Run `pnpm test:upstream-patches`, then
+`pnpm templates && pnpm build && SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD=1 pnpm validate` when
+the static build alone exceeds local resources; release CI must still run the
+default full validation. Do not add theme source to this repository or
+blindly bump the Material package (the failing version may already be current).
+
 **A dev-only resolution bug (0.1.2, `@swup/astro/serialise` & friends) reached
 users while every pipeline check was green.**
 Three gaps stacked up:

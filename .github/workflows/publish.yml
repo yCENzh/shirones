@@ -68,6 +68,8 @@ jobs:
         run: pnpm test:templates
       - name: Validate collection declarations
         run: pnpm test:collections
+      - name: Validate generated-upstream compatibility patches
+        run: pnpm test:upstream-patches
       - name: Resolve version
         id: version
         run: node scripts/resolve-version.mjs

@@ -37,7 +37,7 @@ exist so the pipeline is not hard-wired to one branch or one package name.
 | **Upstream branch/tag of the theme to package** | `main` | Cutting a release from a different theme branch, or packaging a tag (`v1.2.0`) for a reproducible build. |
 | **Clone URL of the theme repository** | `https://github.com/LyraVoid/Shirone.git` | Packaging a fork, or a rename of the theme repository. Must be a public clone URL — the job checks out with no credentials. |
 | **npm package name to publish** | `shirones` | Publishing under a scoped scratch name (for example `@you/shirones-experiment`) while experimenting. The switch away from the `shirones-test` trial package was exactly this field. |
-| **Build and validate, but do not publish** | unchecked (publish) | Rehearsal. Runs `npm pack`, installs the real tarball, checks `init`, `init --force`, `info` and the override suite's full Astro builds, then stops before `npm publish`. The normal workflow skips the separate dev-server smoke test to avoid duplicating the heavy build; run `pnpm validate` locally without `SHIRONES_VALIDATE_BUILD=0` when that check is specifically needed. The tarball is still attached to the run as an artifact for 14 days. |
+| **Build and validate, but do not publish** | unchecked (publish) | Rehearsal. Runs `npm pack`, installs the real tarball, checks `init`, `init --force`, `info`, the full Astro/override builds and the dev-server smoke test, then stops before `npm publish`. When the static build alone is the local memory bottleneck, `SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD=1 pnpm validate` skips that build while retaining the dev smoke test; `SHIRONES_VALIDATE_BUILD=0` skips both Astro phases. The tarball is still attached to the run as an artifact for 14 days. |
 
 ## Where the version comes from
 
@@ -84,8 +84,10 @@ in both packages, so a blog scaffolded with the test package keeps working
 after switching.
 
 Before a production publish, confirm the npm token in `NPM_TOKEN` has publish
-rights on the `shirones` name. The package itself requires Node.js `>=22.12.0`; the workflow runs on the
-current Node LTS, which is above that floor.
+rights on the `shirones` name. The package inherits its Node.js engine floor
+from the selected upstream ref (currently `>=26.13.0`; older refs without an
+engine declaration retain the `>=22.12.0` fallback). The workflow runs on the
+current Node LTS.
 
 ## What the pipeline needs from the environment
 

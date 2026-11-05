@@ -1,11 +1,12 @@
 # Pipeline
 
-Three side-effect-free unit checks run before the theme is synced:
+Four side-effect-free unit checks run before the theme is synced:
 `pnpm test:version` covers strict release versions, `pnpm test:templates`
-covers the path-rewrite fixtures, and `pnpm test:collections` validates the
-hand-written collection declaration output. After `pnpm templates` creates
-`workspace/`, `pnpm test:icons` checks the synced integration's icon plugin and
-alias contract. The packaging steps then turn a checkout of the theme into a
+covers the path-rewrite fixtures, `pnpm test:collections` validates the
+hand-written collection declaration output, and `pnpm test:upstream-patches`
+checks the generated-source compatibility transform. After `pnpm templates`
+creates `workspace/`, `pnpm test:icons` checks the synced integration's icon
+plugin and alias contract. The packaging steps then turn a checkout of the theme into a
 publishable tarball. Each step only reads what the previous packaging step
 produced, so it can be re-run on its own while debugging.
 
@@ -13,6 +14,8 @@ produced, so it can be re-run on its own while debugging.
 LyraVoid/Shirone @ $SHIRONES_UPSTREAM_REF
         │
    0. version:next → the version to publish (patch bump, or an explicit request)
+        │
+   0a. test:upstream-patches → generated-source compatibility transform fixtures
         │
    1. templates    → workspace/ + dist/template/   sync checkout; what `shirones init` copies
         │
@@ -135,14 +138,20 @@ and regexes do not count as registrations. Run it after `pnpm templates`; the
 
 Assembles `dist/`:
 
+- For upstream refs that depend on Material Color Utilities, applies the
+  tested `vite.resolve.noExternal` → `vite.ssr.noExternal` correction to the
+  generated workspace copy only; the upstream checkout and this repository's
+  source tree remain untouched.
 - Bundles `src/integration/` with esbuild into the package entry point.
 - Ships every top-level `src/` directory except the `PACKAGE_SRC_EXCLUDES`
   set (`content`, `integration`) — upstream adding a directory needs no
   pipeline change.
 - Writes the published `package.json`: name from `PACKAGE_NAME`, release version
   from `SHIRONES_PACKAGE_VERSION`, the exact `packageManager` version used by
-  the builder, `exports` map, `bin` for the CLI, Node.js `>=22.12.0` engines,
-  and the dependency sets from `scripts/config.mjs`. The package CLI routes the
+  the builder, `exports` map, `bin` for the CLI, and the `engines.node` floor
+  from the selected upstream `package.json` (currently `>=26.13.0`; older refs
+  without an engine declaration retain the `>=22.12.0` fallback), plus the
+  dependency sets from `scripts/config.mjs`. The package CLI routes the
   pinned pnpm through Corepack, with an `npx pnpm@<version>` fallback, so an old
   pnpm does not try the obsolete `@pnpm/linux-x64` self-update path.
 - Copies `PACKAGE_README.md` in as the npm landing page.
@@ -249,14 +258,16 @@ The only step that proves the package actually works:
    the server restarts, in a browser as much as here. See
    [troubleshooting](troubleshooting.md#validation) for the details.
 
-Set `SHIRONES_VALIDATE_BUILD=0` to skip the build/dev portion when iterating on
-earlier steps. The tarball install and lifecycle checks still run. The
-Build & Publish workflow runs the **full** mode: the dev smoke test is the only
-place `astro dev` is exercised anywhere in the pipeline, and skipping it as
-duplicate work is how a dev-only module-resolution regression (the 0.1.2
-`@swup/astro` subpaths) once reached users — see `docs/troubleshooting.md`.
-Run `pnpm validate` without this variable whenever the dev-server smoke test
-itself is the thing being investigated.
+Set `SHIRONES_VALIDATE_BUILD=0` to skip both Astro phases when iterating on
+earlier lifecycle steps; tarball installation, scaffold, `init --force`, and
+`info` checks still run. If the static build is the local memory bottleneck but
+the dev server can still run, use `SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD=1`:
+this skips only the static build and its output assertions, but still boots
+`astro dev` and crawls the module graph. The Build & Publish workflow always
+runs the **full** mode; the
+dev smoke test is the only place `astro dev` is exercised in the pipeline, and
+skipping it as duplicate work is how a dev-only module-resolution regression
+once reached users — see `docs/troubleshooting.md`.
 
 
 ## Configuration
@@ -273,7 +284,8 @@ overridable by env var so CI can pass dispatch inputs straight through:
 | `SHIRONES_PACKAGE_REPOSITORY` | this repository | `repository.url`; provenance cross-checks it |
 | `SHIRONES_PACKAGE_AUTHOR` | `yCENzh` | Published author field |
 | `SHIRONES_PACKAGE_HOMEPAGE` | `https://github.com/yCENzh/shirones/wiki` | npm landing link |
-| `SHIRONES_VALIDATE_BUILD` | `1` | `0` skips the `astro build`/dev smoke test |
+| `SHIRONES_VALIDATE_BUILD` | `1` | `0` skips both Astro phases; lifecycle and scaffold checks still run |
+| `SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD` | `0` | `1` skips the static build/output checks but still runs the dev-server smoke test |
 | `SHIRONES_PM` | `pnpm` | Package manager used inside validation; the package's user-facing `init` contract remains pnpm-only |
 
 `CONTENT_ROOT` is intentionally **not** an env var: the user-facing directory is

@@ -10,8 +10,11 @@
  *
  * The packed tarball is deliberate: it verifies the npm `files` whitelist and
  * the exact artifact users install, not merely the source `dist/` directory.
- * Set `SHIRONES_VALIDATE_BUILD=0` to skip the Astro production/dev build while
- * keeping the tarball, scaffold, force-backup and `info` checks.
+ * Set `SHIRONES_VALIDATE_BUILD=0` to skip both Astro phases while keeping the
+ * tarball, scaffold, force-backup and `info` checks. Set
+ * `SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD=1` to skip only the memory-heavy
+ * production build and route-output assertions while still exercising the dev
+ * server smoke test.
  */
 
 import { execFileSync, spawn } from "node:child_process";
@@ -26,6 +29,7 @@ const DIST_DIR = resolve("dist");
 const TEST_DIR = resolve(".validate");
 
 const runBuild = process.env.SHIRONES_VALIDATE_BUILD !== "0";
+const skipProductionBuild = process.env.SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD === "1";
 const packageManager = process.env.SHIRONES_PM ?? "pnpm";
 
 function run(command, args, options = {}) {
@@ -509,32 +513,39 @@ if (!runBuild) {
 	process.exit(0);
 }
 
-console.log("[validate] building the scaffolded site");
-run(packageManager, ["exec", "astro", "build"]);
-
-// ── Assert the build produced the routes the manifest promises ──────────────
 const manifest = JSON.parse(await readFile(join(DIST_DIR, "manifest.json"), "utf8"));
-const outDir = join(TEST_DIR, "dist");
 
-const staticRoutes = manifest.routes
-	.map((route) => route.pattern)
-	.filter((pattern) => !pattern.includes("["));
+if (skipProductionBuild) {
+	console.log(
+		"[validate] production build skipped via SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD=1; dev smoke test remains enabled",
+	);
+} else {
+	console.log("[validate] building the scaffolded site");
+	run(packageManager, ["exec", "astro", "build"]);
 
-const missing = [];
-for (const pattern of staticRoutes) {
-	const clean = pattern.replace(/^\//, "");
-	const candidates = clean.includes(".")
-		? [join(outDir, clean)]
-		: [join(outDir, clean, "index.html"), join(outDir, `${clean}.html`)];
-	if (!candidates.some((candidate) => existsSync(candidate))) missing.push(pattern);
+	// ── Assert the build produced the routes the manifest promises ────────────
+	const outDir = join(TEST_DIR, "dist");
+
+	const staticRoutes = manifest.routes
+		.map((route) => route.pattern)
+		.filter((pattern) => !pattern.includes("["));
+
+	const missing = [];
+	for (const pattern of staticRoutes) {
+		const clean = pattern.replace(/^\//, "");
+		const candidates = clean.includes(".")
+			? [join(outDir, clean)]
+			: [join(outDir, clean, "index.html"), join(outDir, `${clean}.html`)];
+		if (!candidates.some((candidate) => existsSync(candidate))) missing.push(pattern);
+	}
+
+	if (missing.length > 0) {
+		fail(`build did not emit these routes: ${missing.join(", ")}`);
+	}
+	console.log(`[validate] ✓ ${staticRoutes.length} static routes emitted`);
+
+	if (!existsSync(join(outDir, "index.html"))) fail("no index.html produced");
 }
-
-if (missing.length > 0) {
-	fail(`build did not emit these routes: ${missing.join(", ")}`);
-}
-console.log(`[validate] ✓ ${staticRoutes.length} static routes emitted`);
-
-if (!existsSync(join(outDir, "index.html"))) fail("no index.html produced");
 
 // ── Prove the dev server boots and renders pages ────────────────────────────
 try {
