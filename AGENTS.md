@@ -45,14 +45,17 @@ here constrains how theme code must be written, it belongs there too.
 ## Build & publish
 
 Publishing remains manual-only — `.github/workflows/publish.yml` has no push or
-pull-request trigger, so editing this repository never publishes. The same
-manual workflow performs the build, packed-package validation and override test
-before its final upload/publish parallel group. It uses `pnpm/setup@v2` (not
+pull-request trigger, so editing this repository never publishes. Its `mode`
+input has three paths: `publish-only` (the default) builds, uploads, and
+publishes while skipping validation; `validate-and-publish` runs all JS,
+packed-package, dev-server, and override checks before publishing; and
+`validate-only` runs those checks and uploads the artifact without publishing.
+The build and publish are separate jobs; only the publish job uses the `npm`
+environment and `id-token: write`. The build job uses `pnpm/setup@v2` (not
 `pnpm/action-setup`) with the current Node LTS. The package inherits
 `engines.node` from the selected upstream ref (currently `>=26.13.0`; older
-refs without an engine declaration retain the `>=22.12.0` fallback). The publish
-step installs npm globally (`pnpm add -g npm`) and writes the auth `.npmrc` from
-`NPM_TOKEN`.
+refs without an engine declaration retain the `>=22.12.0` fallback). The
+publish job updates npm and writes the auth `.npmrc` from `NPM_TOKEN`.
 
 The published version is **not** the theme's version: `resolve-version.mjs`
 patch-bumps the latest release on npm, or takes the workflow's version input,

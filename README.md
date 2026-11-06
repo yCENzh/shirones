@@ -86,11 +86,13 @@ most often can be overridden with an env var (full list in
 ## Publishing
 
 **Manual only** — there is no push trigger, so nothing here publishes by
-accident. GitHub → Actions → **Build & Publish** → **Run workflow**, defaults
-untouched, is the standard release: the next version is a patch bump of the
-latest release on npm, and the version input overrides it when a release needs
-a minor, a major or a prerelease. A version that already exists fails the run.
-Publishing uses `npm publish --provenance` with `NPM_TOKEN`.
+accident. GitHub → Actions → **Build & Publish** → **Run workflow** exposes
+three modes: `publish-only` (default; build and publish without validation),
+`validate-and-publish` (full checks, then publish), and `validate-only` (full
+checks and artifact, no publish). The next version is a patch bump of the
+latest npm release, and the version input overrides it for a minor, major or
+prerelease; an existing version fails the run. Only the separate publish job
+uses the `npm` environment and `npm publish --provenance` with `NPM_TOKEN`.
 
 See [docs/releasing.md](docs/releasing.md) for the dispatch inputs and when
 they are worth changing.

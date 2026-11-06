@@ -242,9 +242,10 @@ dependency, leaving only `astro*` external, precisely because of this.
 
 **`pnpm test:icons` fails: `workspace/src/integration/index.ts is not synced`.**
 The icon contract suite includes a check against the real synced theme source, so
-it must run after `pnpm templates`. `pnpm all` and the Build & Publish workflow
-sync first; if running the test directly in a fresh clone, run `pnpm templates`
-before `pnpm test:icons`.
+it must run after `pnpm templates`. `pnpm all`, both validating Build & Publish
+modes, and the cross-repository `Shirone CI` job sync first; `publish-only`
+intentionally skips the test. If running it directly in a fresh clone, run
+`pnpm templates` before `pnpm test:icons`.
 
 **Validation prints repeated `An error happened during full reload` messages after it already reports success.**
 This usually means the `pnpm exec astro dev` launcher exited while its Astro/Vite
@@ -275,9 +276,11 @@ idempotent correction to the generated `workspace/` copy before bundling, and
 `scripts/upstream-patches.test.mjs` covers both the misplaced and already-fixed
 upstream shapes. Run `pnpm test:upstream-patches`, then
 `pnpm templates && pnpm build && SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD=1 pnpm validate` when
-the static build alone exceeds local resources; release CI must still run the
-default full validation. Do not add theme source to this repository or
-blindly bump the Material package (the failing version may already be current).
+the static build alone exceeds local resources. Select `validate-and-publish`
+or `validate-only` for full release validation; `publish-only` intentionally
+skips these checks. Do not add theme source to this
+repository or blindly bump the Material package (the failing version may
+already be current).
 
 **A dev-only resolution bug (0.1.2, `@swup/astro/serialise` & friends) reached
 users while every pipeline check was green.**
@@ -289,9 +292,11 @@ Three gaps stacked up:
    unresolvable bare specifier from a virtual importer with a root-relative
    pseudo path instead of `null`, which made the fallback resolver stand down.
    Fixed in the theme (`isGenuineResolution` in `fallback-resolver.ts`).
-2. The Build & Publish workflow ran `validate` with
+2. The old Build & Publish workflow ran `validate` with
    `SHIRONES_VALIDATE_BUILD=0`, so `astro dev` never started anywhere in CI.
-   The workflow now runs the full mode.
+   Both current validation modes run the full mode; select `validate-and-publish`
+   or `validate-only` when that gate is required. `publish-only` deliberately
+   omits it.
 3. Even when the dev smoke test ran, it only fetched rendered HTML — pages
    render server-side, so a module that 500s during on-demand transform stays
    invisible. `checkDevServer()` now crawls the client module graph (scripts,

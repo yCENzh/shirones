@@ -10,19 +10,28 @@ Whenever the theme gets updates, the whole release is:
 
 1. Theme work lands in the upstream [`LyraVoid/Shirone`](https://github.com/LyraVoid/Shirone)
    `main` branch — there is nothing to merge or port here.
-2. GitHub → **Actions** → **Build & Publish** → **Run workflow** → leave every
-   field at its default → **Run workflow**.
+2. GitHub → **Actions** → **Build & Publish** → **Run workflow** → leave the
+   **Mode** at `publish-only` (the default) → **Run workflow**.
+
+Before relying on the default mode, make sure the relevant theme-side CI
+has run. `Shirone CI` also has a parallel cross-repository job that tests the
+`shirones` JavaScript contracts against the checked-out theme revision, but it
+does not build or install the npm tarball; use `validate-and-publish` when the
+full package-mode checks must gate this release.
 
 That is it — no version to bump, nothing to push here. The pipeline clones the
-theme itself and picks the next version itself. After syncing the theme it runs
-the icon-contract test before the package build, so that gate always checks the
-same source revision the release will contain.
+theme itself and picks the next version itself. The default `publish-only` mode
+syncs the theme, builds the package, uploads the artifact, and publishes it;
+it deliberately skips the JavaScript checks, packed-package validation, and
+override suite. Choose `validate-and-publish` when those checks should gate the
+release, or `validate-only` to run them and keep the artifact without publishing.
 
-The runtime is dominated by the override suite's Astro builds; it is not a
-fixed-duration check. The run's summary page reports the published version, the
-upstream commit it was built from, and the route/component counts. The publish
-workflow keeps `validate` focused on the packed tarball lifecycle and lets the
-override suite provide the full Astro builds.
+The runtime is dominated by the override suite's Astro builds when either
+validation mode is selected; it is not a fixed-duration check. The run summary
+reports the selected mode, package version, upstream commit, and route/component
+counts. The packed-package lifecycle/dev-server check and the override suite
+run in parallel, and only the separate publish job receives the `npm`
+environment and provenance permission.
 
 ## The six inputs, and whether you should care
 
@@ -37,7 +46,7 @@ exist so the pipeline is not hard-wired to one branch or one package name.
 | **Upstream branch/tag of the theme to package** | `main` | Cutting a release from a different theme branch, or packaging a tag (`v1.2.0`) for a reproducible build. |
 | **Clone URL of the theme repository** | `https://github.com/LyraVoid/Shirone.git` | Packaging a fork, or a rename of the theme repository. Must be a public clone URL — the job checks out with no credentials. |
 | **npm package name to publish** | `shirones` | Publishing under a scoped scratch name (for example `@you/shirones-experiment`) while experimenting. The switch away from the `shirones-test` trial package was exactly this field. |
-| **Build and validate, but do not publish** | unchecked (publish) | Rehearsal. Runs `npm pack`, installs the real tarball, checks `init`, `init --force`, `info`, the full Astro/override builds and the dev-server smoke test, then stops before `npm publish`. When the static build alone is the local memory bottleneck, `SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD=1 pnpm validate` skips that build while retaining the dev smoke test; `SHIRONES_VALIDATE_BUILD=0` skips both Astro phases. The tarball is still attached to the run as an artifact for 14 days. |
+| **Mode** | `publish-only` | `publish-only` (default) builds, uploads, and publishes without running the test suites, packed-package validation, or override suite. `validate-and-publish` runs all checks (unit tests, icon contract, real packed-tarball lifecycle/dev smoke test, and override suite) before publishing. `validate-only` runs the same build and checks, uploads the artifact for 14 days on success, and skips the publish job. This replaces the old `dry-run` checkbox; choose `validate-only` for a non-publishing rehearsal. |
 
 ## Where the version comes from
 
