@@ -65,6 +65,9 @@ jobs:
       - name: Validate version parser
         if: ${{ inputs.mode != 'publish-only' }}
         run: pnpm test:version
+      - name: Validate peer range derivation
+        if: ${{ inputs.mode != 'publish-only' }}
+        run: pnpm test:config
       - name: Validate template rewrite rules
         if: ${{ inputs.mode != 'publish-only' }}
         run: pnpm test:templates
