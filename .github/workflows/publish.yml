@@ -19,10 +19,15 @@ on:
         description: "npm package name (e.g. shirones)"
         required: false
         default: ""
-      dry-run:
-        description: "Rehearsal: build & validate, publish nothing"
-        type: boolean
-        default: false
+      mode:
+        description: "Publish directly, validate and publish, or validate only"
+        type: choice
+        options:
+          - publish-only
+          - validate-and-publish
+          - validate-only
+        required: true
+        default: publish-only
 
 concurrency:
   group: publish-${{ github.ref }}
@@ -30,8 +35,6 @@ concurrency:
 
 permissions:
   contents: read
-  # required by `npm publish --provenance`
-  id-token: write
 
 env:
   SHIRONES_UPSTREAM_REPO: ${{ github.event.inputs.upstream-repo || 'https://github.com/LyraVoid/Shirone.git' }}
@@ -41,21 +44,18 @@ env:
 
 jobs:
   build:
-    name: Build & publish
+    name: Build package
     runs-on: ubuntu-latest
-    environment: npm
     steps:
       - uses: actions/checkout@v7
 
       # install defaults to true; with the committed pnpm-lock.yaml the
-      # built-in `pnpm install` resolves the pipeline deps (esbuild) in one
-      # step, verified against the lockfile.
+      # built-in `pnpm install` resolves the pipeline deps in one step.
       - name: Set up pnpm and Node
         uses: pnpm/setup@v2
         with:
-          # Track the latest pnpm: the published package's `packageManager`
-          # (and therefore every `init`-scaffolded project) pins exactly this
-          # version, which build-package.mjs captures via `pnpm --version`.
+          # Track the latest pnpm: build-package.mjs records this exact version
+          # as the packageManager for every scaffolded project.
           version: latest
           runtime: node@lts
           install: true
@@ -63,30 +63,40 @@ jobs:
           cache: true
 
       - name: Validate version parser
+        if: ${{ inputs.mode != 'publish-only' }}
         run: pnpm test:version
+      - name: Validate peer range derivation
+        if: ${{ inputs.mode != 'publish-only' }}
+        run: pnpm test:config
       - name: Validate template rewrite rules
+        if: ${{ inputs.mode != 'publish-only' }}
         run: pnpm test:templates
       - name: Validate collection declarations
+        if: ${{ inputs.mode != 'publish-only' }}
         run: pnpm test:collections
+      - name: Validate generated-upstream compatibility patches
+        if: ${{ inputs.mode != 'publish-only' }}
+        run: pnpm test:upstream-patches
       - name: Resolve version
         id: version
         run: node scripts/resolve-version.mjs
       - name: Sync upstream and prepare user templates
         run: pnpm templates
       - name: Validate icon pipeline contract
+        if: ${{ inputs.mode != 'publish-only' }}
         run: pnpm test:icons
       - name: Build package and manifest
         run: pnpm build
       - parallel:
-        # Full mode on purpose: the dev-server smoke test (module-graph crawl
-        # included) is the only check that exercises `astro dev`, and a
-        # dev-only resolution regression once shipped because this step ran
-        # with SHIRONES_VALIDATE_BUILD=0. See docs/troubleshooting.md.
-        - name: Validate packed package lifecycle and dev server
-          run: pnpm validate
+          - name: Validate packed package lifecycle and dev server
+            if: ${{ inputs.mode != 'publish-only' }}
+            # Keep the full mode: the dev-server smoke test's module-graph
+            # crawl catches resolution regressions that a static build misses.
+            run: pnpm validate
 
-        - name: Validate config and component overrides
-          run: SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test
+          - name: Validate config and component overrides
+            if: ${{ inputs.mode != 'publish-only' }}
+            run: SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test
 
       - name: Summary
         run: |
@@ -95,6 +105,7 @@ jobs:
 
           | field | value |
           | --- | --- |
+          | mode | \`${{ inputs.mode }}\` |
           | repo | \`$SHIRONES_UPSTREAM_REPO\` |
           | ref | \`$SHIRONES_UPSTREAM_REF\` |
           | commit | \`$(cat workspace/.synced-sha)\` |
@@ -103,21 +114,44 @@ jobs:
           | dist size | $(du -sh dist | cut -f1) |
           EOF
 
-      - parallel:
-        - name: Upload build output
-          uses: actions/upload-artifact@v7
-          with:
-            name: npm-package
-            path: dist/
-            retention-days: 14
+      - name: Upload build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: npm-package
+          path: dist/
+          retention-days: 14
 
-        - name: Publish
-          if: ${{ !inputs.dry-run }}
-          run: |
-            pnpm add -g npm
-            if [ -n "${NPM_TOKEN}" ]; then
-              echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-            fi
-            npm publish ./dist --provenance --access public --loglevel=warn
-          env:
-            NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+  publish:
+    name: Publish to npm
+    needs: build
+    if: ${{ inputs.mode != 'validate-only' }}
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: read
+      # Required only in this job by `npm publish --provenance`.
+      id-token: write
+    steps:
+      - name: Download build output
+        uses: actions/download-artifact@v7
+        with:
+          name: npm-package
+          path: dist/
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26.13.0
+
+      - name: Update npm CLI
+        run: npm install --global npm@latest
+
+      - name: Publish
+        run: |
+          set -euo pipefail
+          if [ -n "${NPM_TOKEN}" ]; then
+            echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          fi
+          npm publish ./dist --provenance --access public --loglevel=warn
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}

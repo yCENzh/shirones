@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { parseSemver } from "./semver.mjs";
 
 /** Where `prepare-templates.mjs` syncs the upstream theme. */
 const WORKSPACE_DIR = resolve("workspace");
@@ -132,6 +133,7 @@ const FALLBACK_EXTRA_DEPENDENCIES = {
 	// Type-only imports that still need to resolve for `astro check`.
 	"@types/hast": "^3.0.5",
 	"@types/mdast": "^4.0.4",
+	"jsonc-parser": "^3.3.1",
 };
 
 const THEME_MANIFEST = join(
@@ -247,21 +249,14 @@ export const PEER_DEPENDENCY_FALLBACKS = {
  * through the pipeline instead of stranding users on a stale version.
  *
  * A peer range says "your project root must be able to install something the
- * theme accepts". Because `dependencies` is inherited from upstream verbatim,
- * the peer has to admit whatever upstream declares — otherwise pnpm refuses to
- * install the package at all. So the peer follows upstream's floor and widens
- * an exact pin to its caret line, keeping the peer as broad as the line rather
- * than pinning it to one version. A package upstream does not declare keeps its
- * fallback.
+ * theme accepts". Because dependencies are inherited from upstream verbatim,
+ * any upstream range must remain admissible as a peer range. Existing ranges
+ * are therefore preserved exactly; only a bare exact SemVer pin is widened to
+ * its caret range. This avoids guessing at comparator sets, unions, tags or
+ * workspace protocols.
  *
- * For the ranges currently in play:
- *
- * - `sharp` — upstream `^0.35.4` yields `^0.35.4`. The stale `^0.34.5` peer is
- *   what left users' project roots on the old minor, where Astro's image
- *   service could not load it and failed with `MissingSharp`.
- * - `astro` — upstream pin `7.3.2` yields `^7.3.2`, so the peer spans the line
- *   instead of demanding one exact version.
- * - `svelte` — upstream `^5.56.8` yields `^5.56.8`.
+ * Current examples: upstream `astro` pin `7.4.5` becomes `^7.4.5`, while
+ * `svelte: ^5.57.3` and `sharp: ^0.35.5` remain unchanged.
  */
 // These tools are excluded from the published package but are required by the
 // generated project's documented `astro check` command. Their ranges still
@@ -272,33 +267,19 @@ export function resolvePeerDependencies(upstreamDependencies) {
 	const peers = {};
 	for (const [name, fallback] of Object.entries(PEER_DEPENDENCY_FALLBACKS)) {
 		const upstream = upstreamDependencies?.[name];
-		if (!upstream) {
-			peers[name] = fallback;
-			continue;
-		}
-		// A range with no numeric version at all (`*`, `latest`) is taken
-		// verbatim: there is no floor to widen, and inventing one could exclude
-		// the version `dependencies` would resolve to.
-		const upstreamFloor = rangeFloor(upstream);
-		peers[name] = upstreamFloor ? toCaretRange(upstreamFloor) : upstream;
+		peers[name] = upstream ? widenExactPin(upstream) : fallback;
 	}
 	for (const name of PROJECT_CHECK_DEPENDENCIES) {
 		const upstream = upstreamDependencies?.[name];
-		if (!upstream) continue;
-		const upstreamFloor = rangeFloor(upstream);
-		peers[name] = upstreamFloor ? toCaretRange(upstreamFloor) : upstream;
+		if (upstream) peers[name] = widenExactPin(upstream);
 	}
 	return peers;
 }
 
-/** Lowest version a range admits, as [major, minor, patch], or null. */
-function rangeFloor(range) {
-	const match = /(\d+)\.(\d+)(?:\.(\d+))?/.exec(range);
-	if (!match) return null;
-	return [Number(match[1]), Number(match[2]), Number(match[3] ?? 0)];
-}
-
-/** Express a floor as a caret range, widening an exact pin to its line. */
-function toCaretRange(floor) {
-	return `^${floor.join(".")}`;
+/** Widen only a complete, bare SemVer pin; leave every range unchanged. */
+function widenExactPin(specifier) {
+	const parsed = parseSemver(specifier);
+	if (!parsed) return specifier;
+	const prerelease = parsed.prerelease ? `-${parsed.prerelease}` : "";
+	return `^${parsed.major}.${parsed.minor}.${parsed.patch}${prerelease}`;
 }

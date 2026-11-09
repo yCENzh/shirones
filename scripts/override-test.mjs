@@ -394,6 +394,7 @@ const KNOWN_UNREACHABLE = new Set([
 	"components-organisms-comment-CommentSection",
 	"components-organisms-comment-Giscus",
 	"components-organisms-comment-Twikoo",
+	"components-organisms-comment-Waline",
 	"components-system-UmamiRuntime",
 	// Loaded by the integration, not through import resolution.
 	"components-system-GlobalStyles",

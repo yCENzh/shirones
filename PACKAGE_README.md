@@ -13,7 +13,8 @@ subsetting, upgrades and troubleshooting.
 No Astro starter and no manual installs — `init` works from a completely empty
 folder. It scaffolds the configuration, example content and static assets,
 writes a `package.json`, and installs `astro`, the theme and its peer
-dependencies for you. The package requires Node.js 22.12 or newer.
+dependencies for you. The package currently requires Node.js 26.13 or newer,
+matching the upstream theme's engine declaration.
 
 ```sh
 mkdir my-blog

@@ -19,8 +19,9 @@ pnpm dev
 
 No Astro starter or manual dependency install is needed — `init` writes a
 `package.json` and installs `astro` plus the theme's peer dependencies. The
-published package requires Node.js 22.12 or newer and `init` sets up pnpm
-behavior only; npm/yarn users must migrate the generated project themselves.
+published package currently requires Node.js 26.13 or newer, following the
+upstream theme's engine floor; `init` sets up pnpm behavior only, so npm/yarn
+users must migrate the generated project themselves.
 The wiki above is the full user guide;
 [PACKAGE_README.md](PACKAGE_README.md) is the abridged version that ships
 inside the tarball as the package README.
@@ -46,6 +47,7 @@ LyraVoid/Shirone (theme + src/integration/)
 | `pnpm version:next` | Decide the version to publish (patch bump, or an explicit one) |
 | `pnpm test:version` | Check strict SemVer parsing rules |
 | `pnpm test:templates` | Check config, data and Markdown path-rewrite fixtures |
+| `pnpm test:upstream-patches` | Check fail-closed compatibility transforms on generated upstream source |
 | `pnpm templates` | Clone the upstream theme into `workspace/`, then build `dist/template/`, rewriting imports for the user layout |
 | `pnpm build` | Bundle the integration, copy theme source/providers, write `package.json`, provenance and the route/override `manifest.json` |
 | `pnpm validate` | Pack the real npm tarball, install it in a scratch project, run `init`, then `astro build` and dev smoke tests |
@@ -78,16 +80,19 @@ most often can be overridden with an env var (full list in
 | `SHIRONES_UPSTREAM_REPO` | `https://github.com/LyraVoid/Shirone.git` | Theme repository |
 | `SHIRONES_UPSTREAM_REF` | `main` | Branch/tag to package |
 | `SHIRONES_PACKAGE_NAME` | `shirones` | Published package name |
-| `SHIRONES_VALIDATE_BUILD` | `1` | Set to `0` to skip the Astro build during validation |
+| `SHIRONES_VALIDATE_BUILD` | `1` | Set to `0` to skip both Astro phases (lifecycle/init checks still run) |
+| `SHIRONES_VALIDATE_SKIP_PRODUCTION_BUILD` | `0` | Set to `1` to skip the static build but keep the `astro dev` smoke test |
 
 ## Publishing
 
 **Manual only** — there is no push trigger, so nothing here publishes by
-accident. GitHub → Actions → **Build & Publish** → **Run workflow**, defaults
-untouched, is the standard release: the next version is a patch bump of the
-latest release on npm, and the version input overrides it when a release needs
-a minor, a major or a prerelease. A version that already exists fails the run.
-Publishing uses `npm publish --provenance` with `NPM_TOKEN`.
+accident. GitHub → Actions → **Build & Publish** → **Run workflow** exposes
+three modes: `publish-only` (default; build and publish without validation),
+`validate-and-publish` (full checks, then publish), and `validate-only` (full
+checks and artifact, no publish). The next version is a patch bump of the
+latest npm release, and the version input overrides it for a minor, major or
+prerelease; an existing version fails the run. Only the separate publish job
+uses the `npm` environment and `npm publish --provenance` with `NPM_TOKEN`.
 
 See [docs/releasing.md](docs/releasing.md) for the dispatch inputs and when
 they are worth changing.

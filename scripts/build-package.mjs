@@ -41,6 +41,7 @@ import {
 	resolvePeerDependencies,
 } from "./config.mjs";
 import { renderCollectionsDts } from "./collections-dts.mjs";
+import { ensureMaterialUtilitiesNoExternal } from "./upstream-patches.mjs";
 
 const WORKSPACE_DIR = resolve("workspace");
 
@@ -86,6 +87,24 @@ const DIST_DIR = resolve("dist");
 const upstreamPkg = JSON.parse(
 	await readFile(join(WORKSPACE_DIR, "package.json"), "utf8"),
 );
+
+// The theme's Material Color Utilities dependency uses extensionless ESM
+// imports. Ensure package-mode Vite bundles it for SSR (the setting belongs
+// under vite.ssr, not vite.resolve). This rewrites only the generated workspace
+// copy and is covered by the upstream-patch unit suite.
+const MATERIAL_UTILITIES = "@material/material-color-utilities";
+if (
+	upstreamPkg.dependencies?.[MATERIAL_UTILITIES] ||
+	upstreamPkg.devDependencies?.[MATERIAL_UTILITIES]
+) {
+	const integrationEntry = join(WORKSPACE_DIR, "src/integration/index.ts");
+	const source = await readFile(integrationEntry, "utf8");
+	const patched = ensureMaterialUtilitiesNoExternal(source);
+	if (patched !== source) {
+		await writeFile(integrationEntry, patched, "utf8");
+		console.log(`[build] Vite SSR noExternal: ${MATERIAL_UTILITIES}`);
+	}
+}
 
 console.log(`[build] packaging ${PACKAGE_NAME}@${PACKAGE_VERSION ?? "0.0.0"}`);
 
@@ -550,7 +569,9 @@ const pkg = {
 	],
 	dependencies,
 	peerDependencies,
-	engines: { node: ">=22.12.0" },
+	// Keep the install-time floor in sync with the theme revision being packed.
+	// Older refs without an explicit engine retain the historical pipeline floor.
+	engines: { node: upstreamPkg.engines?.node ?? ">=22.12.0" },
 	publishConfig: { access: "public" },
 };
 

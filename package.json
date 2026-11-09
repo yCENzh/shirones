@@ -5,13 +5,15 @@
   "type": "module",
   "description": "Build & publish pipeline for the shirones npm package",
   "scripts": {
-    "all": "pnpm test:version && pnpm test:templates && pnpm test:collections && pnpm templates && pnpm test:icons && pnpm build && pnpm validate && SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test",
+    "all": "pnpm test:version && pnpm test:config && pnpm test:templates && pnpm test:collections && pnpm test:upstream-patches && pnpm templates && pnpm test:icons && pnpm build && pnpm validate && SHIRONES_OVERTEST_SKIP_BUILD=1 pnpm override-test",
     "build": "node scripts/build-package.mjs",
     "override-test": "node scripts/override-test.mjs",
     "templates": "node scripts/prepare-templates.mjs",
     "test:collections": "node --test scripts/collections-dts.test.mjs",
+    "test:config": "node --test scripts/config.test.mjs",
     "test:icons": "node --test scripts/icon-contract.test.mjs",
     "test:templates": "node --test scripts/template-rewrites.test.mjs",
+    "test:upstream-patches": "node --test scripts/upstream-patches.test.mjs",
     "test:version": "node --test scripts/semver.test.mjs",
     "validate": "node scripts/validate.mjs",
     "version:next": "node scripts/resolve-version.mjs"
@@ -23,7 +25,7 @@
   "devDependencies": {
     "@iconify-json/fa7-brands": "^1.2.4",
     "@iconify-json/fa7-solid": "^1.2.5",
-    "@iconify-json/material-symbols": "^1.2.93",
-    "@iconify-json/simple-icons": "^1.2.98"
+    "@iconify-json/material-symbols": "^1.2.97",
+    "@iconify-json/simple-icons": "^1.2.101"
   }
 }
