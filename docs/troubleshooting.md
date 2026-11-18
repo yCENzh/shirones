@@ -247,6 +247,16 @@ modes, and the cross-repository `Shirone CI` job sync first; `publish-only`
 intentionally skips the test. If running it directly in a fresh clone, run
 `pnpm templates` before `pnpm test:icons`.
 
+**`pnpm validate` fails: `icon parity probe failed`.**
+The probe page in the scratch project uses an icon that nothing in the theme
+references. If that icon is blank while the control icon rendered, the
+project's own files are not reaching the icon collection: the theme scanned
+them and then served something else, or did not scan them. Start from the
+theme's `src/integration/vite/icon/regeneration.ts` and check that
+`Icon.svelte` imports `virtual:shirone-icons` and that the plugin's `load`
+hook is what answers it. If the control icon is blank too, the probe page
+itself failed to render and the icon pipeline is not the first suspect.
+
 **Validation prints repeated `An error happened during full reload` messages after it already reports success.**
 This usually means the `pnpm exec astro dev` launcher exited while its Astro/Vite
 child process kept watching the scratch directory. Removing `.validate/` then

@@ -125,7 +125,10 @@ resolves paths against the *project* root, not the package:
 Configs stay **TypeScript**, importing their types from the package, so users
 keep full autocomplete and the field set matches the theme exactly.
 
-## After sync: `pnpm test:icons` — `scripts/icon-contract.test.mjs`
+## After sync: `pnpm test:icons` — `scripts/icon-contract.test.mjs`, `scripts/icon-probe.test.mjs`
+
+`icon-probe.test.mjs` covers the helpers behind the icon parity probe that
+`pnpm validate` runs (step 3 below); it needs no synced workspace.
 
 This suite reads the real `workspace/src/integration/index.ts` as well as using
 small fixtures. It verifies that the regeneration factory is executable code
@@ -147,6 +150,11 @@ Assembles `dist/`:
   generated workspace copy only; the upstream checkout and this repository's
   source tree remain untouched.
 - Bundles `src/integration/` with esbuild into the package entry point.
+- Generates no icon collection for current themes: they serve it as the virtual
+  module `virtual:shirone-icons`, built in memory from the user's project, so
+  there is nothing to ship. A theme ref that still exports
+  `generateIconCollections` gets its `src/generated/local-icon-collections.ts`
+  written as before.
 - Ships every top-level `src/` directory except the `PACKAGE_SRC_EXCLUDES`
   set (`content`, `integration`) — upstream adding a directory needs no
   pipeline change.
@@ -245,8 +253,16 @@ The only step that proves the package actually works:
    exists. A dangling base only logs
    `[glob-loader] The base directory … does not exist` and the build succeeds
    with that collection empty, so nothing downstream notices.
-5. Run `astro build` and assert the expected routes were emitted.
-6. Start `astro dev` and exercise it the way a browser would
+5. Plant the icon parity probe: a page in the scratch project's own
+   `src/pages/` with an icon nothing else references, one the theme already
+   uses, and one that is in no icon set (`scripts/icon-probe.mjs`). Both Astro
+   phases below must render the first two and leave the third empty. The icon
+   contract in step 1 reads source text and stayed green while package-mode
+   projects rendered only the theme's own icons, so this one reads HTML.
+   Skipped, with a log line, for theme refs that predate the virtual icon
+   module.
+6. Run `astro build` and assert the expected routes were emitted.
+7. Start `astro dev` and exercise it the way a browser would
    (`checkDevServer`), because dev and build fail in different ways — the
    overlay resolver and the SSR shims are only exercised by one of them.
    Rendered HTML alone proves nothing about the client module graph: pages

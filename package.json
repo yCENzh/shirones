@@ -11,7 +11,7 @@
     "templates": "node scripts/prepare-templates.mjs",
     "test:collections": "node --test scripts/collections-dts.test.mjs",
     "test:config": "node --test scripts/config.test.mjs",
-    "test:icons": "node --test scripts/icon-contract.test.mjs",
+    "test:icons": "node --test scripts/icon-contract.test.mjs scripts/icon-probe.test.mjs",
     "test:templates": "node --test scripts/template-rewrites.test.mjs",
     "test:upstream-patches": "node --test scripts/upstream-patches.test.mjs",
     "test:version": "node --test scripts/semver.test.mjs",
